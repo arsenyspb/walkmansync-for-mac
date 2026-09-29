@@ -10,16 +10,16 @@
 
 <p align="center">
   <a href="https://github.com/arsenyspb/walkmansync-for-mac/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/arsenyspb/walkmansync-for-mac/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI%20Build" alt="CI Build Status" /></a>
-  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases"><img src="https://img.shields.io/github/v/release/arsenyspb/walkmansync-for-mac?style=for-the-badge&logo=apple&logoColor=white&color=007AFF" alt="Latest Release" /></a>
+  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases"><img src="https://img.shields.io/github/v/release/arsenyspb/walkmansync-for-mac?style=for-the-badge&logo=apple&logoColor=white&color=007AFF&label=Release" alt="Latest Release" /></a>
   <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Apple%20Silicon%20%26%20Intel-black?style=for-the-badge&logo=apple&logoColor=white" alt="Platform macOS" />
   <img src="https://img.shields.io/badge/Swift-5.9+-FA7343?style=for-the-badge&logo=swift&logoColor=white" alt="Language Swift" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge" alt="License GPLv3" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge" alt="License GPLv3" /></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Hardware-Sony%20NW--E400%20%7C%20NW--E500%20%7C%20NW--HD-002F6C?style=flat-square&logo=sony&logoColor=white" alt="Hardware Target" />
-  <img src="https://img.shields.io/badge/Protocol-3rd--Gen%20OMGAUDIO%20%7C%20OpenMG-orange?style=flat-square" alt="Protocol" />
-  <img src="https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Native)-success?style=flat-square" alt="Zero Dependencies" />
+  <img src="https://img.shields.io/badge/Hardware-Sony%20NW--E400%20%7C%20NW--E500%20%7C%20NW--HD-002F6C?style=for-the-badge&logo=sony&logoColor=white" alt="Hardware Target" />
+  <img src="https://img.shields.io/badge/Protocol-3rd--Gen%20OMGAUDIO%20%7C%20OpenMG-orange?style=for-the-badge" alt="Protocol" />
+  <img src="https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Native)-success?style=for-the-badge" alt="Zero Dependencies" />
 </p>
 
 ---

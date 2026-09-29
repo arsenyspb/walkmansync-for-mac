@@ -82,7 +82,7 @@ public enum WalkmanKeyManager {
         return data
     }
     
-    /// Computes the 4-byte track XOR key:
+    /// Computes the 4-byte track XOR key as documented in the community MP3FM specification (xaskasdf):
     /// key = ((0x2465 + trackId * 0x5296E435) & 0xFFFFFFFF) ^ deviceKey
     public static func computeXorKey(trackId: Int, deviceKey: UInt32) -> [UInt8] {
         let titleId = UInt64(trackId)
