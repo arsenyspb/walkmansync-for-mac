@@ -1,0 +1,17 @@
+{
+  "name": "Java 8 Maven",
+  "image": "mcr.microsoft.com/devcontainers/java:8-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "java.format.settings.url": ".vscode/formatter.xml"
+      },
+      "extensions": [
+        "vscjava.vscode-java-pack"
+      ]
+    }
+  }
+}
