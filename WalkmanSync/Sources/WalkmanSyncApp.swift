@@ -158,23 +158,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func checkConnectedWalkman() {
-        let fm = FileManager.default
-        let volumesURL = URL(fileURLWithPath: "/Volumes")
-        var detected: URL?
-        
-        if let volumes = try? fm.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: nil) {
-            for vol in volumes {
-                let name = vol.lastPathComponent.uppercased()
-                let hasOmgAudio = fm.fileExists(atPath: vol.appendingPathComponent("OMGAUDIO").path)
-                let hasMp3fm = fm.fileExists(atPath: vol.appendingPathComponent("MP3FM").path)
-                let hasNwwm = fm.fileExists(atPath: vol.appendingPathComponent("NWWM").path)
-                
-                if name == "WALKMAN" || name == "SONY" || hasOmgAudio || hasMp3fm || hasNwwm {
-                    detected = vol
-                    break
-                }
-            }
-        }
+        let detected = SyncEngine.findWalkmanVolume()
         
         if let vol = detected {
             if walkmanUrl != vol {

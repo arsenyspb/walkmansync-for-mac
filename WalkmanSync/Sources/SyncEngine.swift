@@ -37,6 +37,53 @@ public class SyncEngine {
         return nil
     }
     
+    /// Discovers all mounted Sony Walkman devices across /Volumes, system mounts, and custom paths
+    public static func findAllWalkmanVolumes() -> [URL] {
+        let fm = FileManager.default
+        var discovered: [URL] = []
+        var checkedPaths = Set<String>()
+        
+        func evaluate(url: URL) {
+            let normalized = url.resolvingSymlinksInPath().standardized.path
+            guard !checkedPaths.contains(normalized) else { return }
+            checkedPaths.insert(normalized)
+            
+            let name = url.lastPathComponent.uppercased()
+            let hasOmg = fm.fileExists(atPath: url.appendingPathComponent("OMGAUDIO").path)
+            let hasMp3fm = fm.fileExists(atPath: url.appendingPathComponent("MP3FM").path)
+            let hasNwwm = fm.fileExists(atPath: url.appendingPathComponent("NWWM").path)
+            
+            if name == "WALKMAN" || name == "SONY" || hasOmg || hasMp3fm || hasNwwm {
+                discovered.append(url)
+            }
+        }
+        
+        // 1. Check /Volumes
+        let volumesURL = URL(fileURLWithPath: "/Volumes")
+        if let volumes = try? fm.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: nil) {
+            for vol in volumes { evaluate(url: vol) }
+        }
+        
+        // 2. Check mounted volume URLs from OS
+        if let mounted = fm.mountedVolumeURLs(includingResourceValuesForKeys: nil, options: .skipHiddenVolumes) {
+            for vol in mounted { evaluate(url: vol) }
+        }
+        
+        // 3. Check common fallbacks (/tmp/walkman, /tmp/WALKMAN)
+        for fallback in ["/tmp/walkman", "/tmp/WALKMAN"] {
+            let u = URL(fileURLWithPath: fallback)
+            if fm.fileExists(atPath: u.path) {
+                evaluate(url: u)
+            }
+        }
+        
+        return discovered
+    }
+    
+    public static func findWalkmanVolume() -> URL? {
+        return findAllWalkmanVolumes().first
+    }
+    
     /// Scans directory for supported audio files (MP3, FLAC, M4A, WAV, etc.) and extracts metadata
     public static func scanForMusic(in folder: URL) -> [WalkmanDBGenerator.WalkmanTitle] {
         var titles: [WalkmanDBGenerator.WalkmanTitle] = []

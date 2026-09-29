@@ -632,8 +632,8 @@ public class WalkmanDBGenerator {
                 d.append(contentsOf: [0xFF, 0xFF])
             }
             
-            // File properties: CBR, MPEG-1 Layer 3 128kbps, Stereo
-            d.append(contentsOf: [0x80, 0xD9, 0x10, 0x00])
+            // File properties: MP3 (0x03), CBR (0x80), MPEG-1 Layer 3 128kbps (0xD9), Stereo (0x10)
+            d.append(contentsOf: [0x03, 0x80, 0xD9, 0x10])
             d.append(int2bytes(t.length * 1000, length: 4)) // length in ms
             d.append(contentsOf: constant1)
             
@@ -659,7 +659,8 @@ public class WalkmanDBGenerator {
         d.append(contentsOf: tag.utf8.prefix(4))
         d.append(contentsOf: constant)
         
-        let utf16Data = text.data(using: .utf16BigEndian) ?? Data()
+        let cleanText = String(text.prefix(59))
+        let utf16Data = cleanText.data(using: .utf16BigEndian) ?? Data()
         d.append(utf16Data)
         
         let remainingBytes = 0x80 - 4 - 2 - utf16Data.count

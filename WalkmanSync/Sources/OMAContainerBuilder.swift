@@ -1,89 +1,109 @@
 import Foundation
 
-/// Utilities to construct Sony OMA files (EA3 ID3v2 tag + EA3 audio header + scrambled audio)
+/// Utilities to construct Sony OMA files (Sony EA3 tag + EA3 audio header + scrambled audio)
+/// Reverse-engineered from Sony SonicStage and JSymphonic specs for Sony Network Walkmans.
 public enum OMAContainerBuilder {
     
     public static let ea3TagSize = 3072
     public static let ea3AudioHeaderSize = 96
     
-    /// Builds standard 3072-byte EA3 Tag (ID3v2-compatible)
+    /// Builds standard 3072-byte Sony EA3 Tag (UTF-16BE with Sony 3-byte encoding code)
     public static func buildEA3Tag(title: WalkmanDBGenerator.WalkmanTitle) -> Data {
-        var frames = Data()
+        var tagData = Data()
         
-        func addFrame(id: String, text: String) {
-            guard !text.isEmpty else { return }
-            var frameData = Data()
-            frameData.append(0x03) // UTF-8 encoding marker
-            frameData.append(contentsOf: text.utf8)
+        // 1. Tag header (10 bytes)
+        // Magic "ea3\x03"
+        tagData.append(contentsOf: [0x65, 0x61, 0x33, 0x03])
+        // Tag size code: 0x17 * 0x80 + 0x80 = 0xC00 (3072 bytes)
+        tagData.append(contentsOf: [0x00, 0x00, 0x00, 0x00, 0x17, 0x76])
+        
+        let encodageCode: [UInt8] = [0x00, 0x00, 0x02]
+        
+        func appendFrame(label: String, text: String) {
+            let clean = String(text.prefix(59))
+            guard !clean.isEmpty, let utf16Bytes = clean.data(using: .utf16BigEndian) else { return }
             
-            var frame = Data()
-            frame.append(contentsOf: id.utf8)
-            let size = UInt32(frameData.count)
-            frame.append(UInt8((size >> 24) & 0xFF))
-            frame.append(UInt8((size >> 16) & 0xFF))
-            frame.append(UInt8((size >> 8) & 0xFF))
-            frame.append(UInt8(size & 0xFF))
-            frame.append(0x00) // Flags
-            frame.append(0x00)
-            frame.append(frameData)
-            frames.append(frame)
+            // Label (4 bytes)
+            tagData.append(contentsOf: label.utf8.prefix(4))
+            // Length: utf16Bytes.count + 1 (4 bytes BigEndian)
+            let frameLen = UInt32(utf16Bytes.count + 1)
+            tagData.append(UInt8((frameLen >> 24) & 0xFF))
+            tagData.append(UInt8((frameLen >> 16) & 0xFF))
+            tagData.append(UInt8((frameLen >> 8) & 0xFF))
+            tagData.append(UInt8(frameLen & 0xFF))
+            // Encoding code (3 bytes)
+            tagData.append(contentsOf: encodageCode)
+            // Text in UTF-16BE
+            tagData.append(utf16Bytes)
         }
         
-        func addTXXX(description: String, value: String) {
-            var payload = Data()
-            payload.append(0x03) // UTF-8
-            payload.append(contentsOf: description.utf8)
-            payload.append(0x00) // Null separator
-            payload.append(contentsOf: value.utf8)
-            
-            var frame = Data()
-            frame.append(contentsOf: "TXXX".utf8)
-            let size = UInt32(payload.count)
-            frame.append(UInt8((size >> 24) & 0xFF))
-            frame.append(UInt8((size >> 16) & 0xFF))
-            frame.append(UInt8((size >> 8) & 0xFF))
-            frame.append(UInt8(size & 0xFF))
-            frame.append(0x00)
-            frame.append(0x00)
-            frame.append(payload)
-            frames.append(frame)
+        // TIT2 - Title
+        appendFrame(label: "TIT2", text: title.titleName)
+        // TPE1 - Artist
+        appendFrame(label: "TPE1", text: title.artistName)
+        // TALB - Album
+        appendFrame(label: "TALB", text: title.albumName)
+        // TCON - Genre
+        appendFrame(label: "TCON", text: title.genre)
+        
+        // TXXX - OMG_TRACK
+        let trackNum = title.id % 100
+        let trackNumStr = "\(trackNum)"
+        if let omgTrackBytes = "OMG_TRACK".data(using: .utf16BigEndian),
+           let numBytes = trackNumStr.data(using: .utf16BigEndian) {
+            tagData.append(contentsOf: "TXXX".utf8)
+            let txxxContentLen = (trackNum < 10) ? 23 : 25
+            tagData.append(UInt8((txxxContentLen >> 24) & 0xFF))
+            tagData.append(UInt8((txxxContentLen >> 16) & 0xFF))
+            tagData.append(UInt8((txxxContentLen >> 8) & 0xFF))
+            tagData.append(UInt8(txxxContentLen & 0xFF))
+            tagData.append(contentsOf: encodageCode)
+            tagData.append(omgTrackBytes)
+            tagData.append(contentsOf: [0x00, 0x00]) // 2 zeros separator
+            tagData.append(numBytes)
         }
         
-        addFrame(id: "TIT2", text: title.titleName)
-        addFrame(id: "TPE1", text: title.artistName)
-        addFrame(id: "TALB", text: title.albumName)
-        addFrame(id: "TCON", text: title.genre)
-        addTXXX(description: "OMG_TRACK", value: "\(title.id)")
-        addTXXX(description: "OMG_TRLDA", value: "2005/01/01 00:00:00")
+        // TYER - Year
+        if let yearBytes = "2005".data(using: .utf16BigEndian) {
+            tagData.append(contentsOf: "TYER".utf8)
+            let yLen = UInt32(yearBytes.count + 1)
+            tagData.append(UInt8((yLen >> 24) & 0xFF))
+            tagData.append(UInt8((yLen >> 16) & 0xFF))
+            tagData.append(UInt8((yLen >> 8) & 0xFF))
+            tagData.append(UInt8(yLen & 0xFF))
+            tagData.append(contentsOf: encodageCode)
+            tagData.append(yearBytes)
+        }
         
-        var header = Data()
-        header.append(contentsOf: "ea3".utf8)
-        header.append(0x03) // Version 3
-        header.append(0x00) // Revision
-        header.append(0x00) // Flags
+        // TLEN - Track duration in ms
+        let msStr = "\(title.length * 1000)"
+        if let msBytes = msStr.data(using: .utf16BigEndian) {
+            tagData.append(contentsOf: "TLEN".utf8)
+            let mLen = UInt32(msBytes.count + 1)
+            tagData.append(UInt8((mLen >> 24) & 0xFF))
+            tagData.append(UInt8((mLen >> 16) & 0xFF))
+            tagData.append(UInt8((mLen >> 8) & 0xFF))
+            tagData.append(UInt8(mLen & 0xFF))
+            tagData.append(contentsOf: encodageCode)
+            tagData.append(msBytes)
+        }
         
-        let contentSize = ea3TagSize - 10
-        let ss = ((contentSize & 0x0FE00000) << 3) |
-                 ((contentSize & 0x001FC000) << 2) |
-                 ((contentSize & 0x00003F80) << 1) |
-                 (contentSize & 0x0000007F)
-        
-        header.append(UInt8((ss >> 24) & 0xFF))
-        header.append(UInt8((ss >> 16) & 0xFF))
-        header.append(UInt8((ss >> 8) & 0xFF))
-        header.append(UInt8(ss & 0xFF))
-        
-        var tag = header + frames
-        if tag.count < ea3TagSize {
-            tag.append(Data(count: ea3TagSize - tag.count))
+        // Pad with zeros to exactly 3072 bytes (0xC00)
+        if tagData.count < ea3TagSize {
+            tagData.append(Data(count: ea3TagSize - tagData.count))
         } else {
-            tag = tag.prefix(ea3TagSize)
+            tagData = tagData.prefix(ea3TagSize)
         }
-        return tag
+        
+        return tagData
     }
     
-    /// Builds 96-byte EA3 audio header (Magic "EA3", 0xFFFE protection, MP3 codec ID 3)
-    public static func buildEA3AudioHeader(bitrateKbps: Int = 128, channels: Int = 2) -> Data {
+    /// Builds 96-byte EA3 audio header (Magic "EA3", protection, MP3 codec ID 3, duration & frame count)
+    public static func buildEA3AudioHeader(
+        title: WalkmanDBGenerator.WalkmanTitle,
+        gotKey: Bool = true,
+        channels: Int = 2
+    ) -> Data {
         var header = Data(count: ea3AudioHeaderSize)
         
         // Bytes 0-2: "EA3"
@@ -96,19 +116,39 @@ public enum OMAContainerBuilder {
         header[4] = 0x00
         // Byte 5: Size 0x60 (96 bytes)
         header[5] = 0x60
-        // Bytes 6-7: 0xFFFE (Encrypted MP3 marker for 3rd Gen)
-        header[6] = 0xFF
-        header[7] = 0xFE
+        // Bytes 6-7: Protection Flag (0xFFFE for scrambled MP3, 0xFFFF for unencrypted)
+        if gotKey {
+            header[6] = 0xFF
+            header[7] = 0xFE
+        } else {
+            header[6] = 0xFF
+            header[7] = 0xFF
+        }
         
-        // Byte 32: Codec ID (3 = MP3)
-        header[32] = 0x03
+        // Bytes 8-31: 24 zeros
         
-        // Bytes 33-35: Codec parameters (CBR, MPEG1 Layer III, stereo)
-        header[33] = 0x80 // CBR
-        // (MPEG1: 3 << 6) | (Layer III: 1 << 4) | (128kbps: 0x09) = 0xD9
-        header[34] = 0xD9
-        header[35] = (channels >= 2) ? 0x10 : 0x30
+        // Bytes 32-35: File Properties (4 bytes)
+        header[32] = 0x03 // 0x03 = MP3 format
+        header[33] = 0x80 // 0x80 = CBR
+        header[34] = 0xD9 // MPEG-1 Layer 3, index 9 (128-320kbps standard)
+        header[35] = (channels >= 2) ? 0x10 : 0x30 // Stereo (0x10) or Mono (0x30)
         
+        // Bytes 36-39: Track length in milliseconds (4 bytes BigEndian)
+        let lengthMs = UInt32(title.length * 1000)
+        header[36] = UInt8((lengthMs >> 24) & 0xFF)
+        header[37] = UInt8((lengthMs >> 16) & 0xFF)
+        header[38] = UInt8((lengthMs >> 8) & 0xFF)
+        header[39] = UInt8(lengthMs & 0xFF)
+        
+        // Bytes 40-43: Total MP3 audio frames (4 bytes BigEndian)
+        // Standard MPEG-1 Layer 3: 1152 samples/frame at 44.1 kHz
+        let frames = UInt32((Double(lengthMs) * 44.1) / 1152.0)
+        header[40] = UInt8((frames >> 24) & 0xFF)
+        header[41] = UInt8((frames >> 16) & 0xFF)
+        header[42] = UInt8((frames >> 8) & 0xFF)
+        header[43] = UInt8(frames & 0xFF)
+        
+        // Bytes 44-95: Remaining padding zeros
         return header
     }
     
@@ -141,17 +181,17 @@ public enum OMAContainerBuilder {
         deviceKey: UInt32
     ) throws -> Data {
         let ea3Tag = buildEA3Tag(title: title)
-        let ea3AudioHeader = buildEA3AudioHeader()
+        let ea3AudioHeader = buildEA3AudioHeader(title: title, gotKey: true)
         
         var rawAudio = try extractRawMP3Audio(from: sourceMP3URL)
         let xorKey = WalkmanKeyManager.computeXorKey(trackId: title.id, deviceKey: deviceKey)
         WalkmanKeyManager.xorScramble(data: &rawAudio, keyBytes: xorKey)
         
-        var omaData = Data()
-        omaData.reserveCapacity(ea3Tag.count + ea3AudioHeader.count + rawAudio.count)
-        omaData.append(ea3Tag)
-        omaData.append(ea3AudioHeader)
-        omaData.append(rawAudio)
-        return omaData
+        var oma = Data()
+        oma.reserveCapacity(ea3Tag.count + ea3AudioHeader.count + rawAudio.count)
+        oma.append(ea3Tag)
+        oma.append(ea3AudioHeader)
+        oma.append(rawAudio)
+        return oma
     }
 }

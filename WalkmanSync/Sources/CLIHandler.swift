@@ -148,37 +148,32 @@ public class CLIHandler {
     
     private static func handleDetect(isJSON: Bool) {
         let fm = FileManager.default
-        let volumesURL = URL(fileURLWithPath: "/Volumes")
+        let volumes = SyncEngine.findAllWalkmanVolumes()
         var detectedDevices: [[String: Any]] = []
         
-        if let volumes = try? fm.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: [.volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey]) {
-            for vol in volumes {
-                let name = vol.lastPathComponent
-                let hasOmgAudio = fm.fileExists(atPath: vol.appendingPathComponent("OMGAUDIO").path)
-                let hasMp3fm = fm.fileExists(atPath: vol.appendingPathComponent("MP3FM").path)
-                let hasNwwm = fm.fileExists(atPath: vol.appendingPathComponent("NWWM").path)
-                
-                if name.uppercased() == "WALKMAN" || name.uppercased() == "SONY" || hasOmgAudio || hasMp3fm || hasNwwm {
-                    let dvidPath = vol.appendingPathComponent("MP3FM/DvID.DAT")
-                    let key = WalkmanKeyManager.readDeviceKey(from: dvidPath)
-                    let keyHex = key != nil ? String(format: "0x%08X", key!) : "Not Initialized"
-                    
-                    let attrs = try? fm.attributesOfFileSystem(forPath: vol.path)
-                    let totalBytes = attrs?[.systemSize] as? Int64 ?? 0
-                    let freeBytes = attrs?[.systemFreeSize] as? Int64 ?? 0
-                    
-                    let devInfo: [String: Any] = [
-                        "path": vol.path,
-                        "name": name,
-                        "hasOmgAudio": hasOmgAudio,
-                        "hasMp3fm": hasMp3fm,
-                        "deviceKey": keyHex,
-                        "totalCapacityBytes": totalBytes,
-                        "freeCapacityBytes": freeBytes
-                    ]
-                    detectedDevices.append(devInfo)
-                }
-            }
+        for vol in volumes {
+            let name = vol.lastPathComponent
+            let hasOmgAudio = fm.fileExists(atPath: vol.appendingPathComponent("OMGAUDIO").path)
+            let hasMp3fm = fm.fileExists(atPath: vol.appendingPathComponent("MP3FM").path)
+            
+            let dvidPath = vol.appendingPathComponent("MP3FM/DvID.DAT")
+            let key = WalkmanKeyManager.readDeviceKey(from: dvidPath)
+            let keyHex = key != nil ? String(format: "0x%08X", key!) : "Not Initialized"
+            
+            let attrs = try? fm.attributesOfFileSystem(forPath: vol.path)
+            let totalBytes = attrs?[.systemSize] as? Int64 ?? 0
+            let freeBytes = attrs?[.systemFreeSize] as? Int64 ?? 0
+            
+            let devInfo: [String: Any] = [
+                "path": vol.path,
+                "name": name,
+                "hasOmgAudio": hasOmgAudio,
+                "hasMp3fm": hasMp3fm,
+                "deviceKey": keyHex,
+                "totalCapacityBytes": totalBytes,
+                "freeCapacityBytes": freeBytes
+            ]
+            detectedDevices.append(devInfo)
         }
         
         if isJSON {
@@ -344,21 +339,7 @@ public class CLIHandler {
                 return url
             }
         }
-        
-        let fm = FileManager.default
-        let volumesURL = URL(fileURLWithPath: "/Volumes")
-        if let volumes = try? fm.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: nil) {
-            for vol in volumes {
-                let name = vol.lastPathComponent.uppercased()
-                let hasOmgAudio = fm.fileExists(atPath: vol.appendingPathComponent("OMGAUDIO").path)
-                let hasMp3fm = fm.fileExists(atPath: vol.appendingPathComponent("MP3FM").path)
-                let hasNwwm = fm.fileExists(atPath: vol.appendingPathComponent("NWWM").path)
-                if name == "WALKMAN" || name == "SONY" || hasOmgAudio || hasMp3fm || hasNwwm {
-                    return vol
-                }
-            }
-        }
-        return nil
+        return SyncEngine.findWalkmanVolume()
     }
     
     private static func printUsage() {

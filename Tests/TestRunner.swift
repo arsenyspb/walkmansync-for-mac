@@ -53,7 +53,7 @@ struct TestRunner {
         assert(tag.prefix(3) == Data("ea3".utf8), "Tag magic must be 'ea3'")
         assert(tag[3] == 0x03, "Tag version must be 3")
         
-        let audioHdr = OMAContainerBuilder.buildEA3AudioHeader()
+        let audioHdr = OMAContainerBuilder.buildEA3AudioHeader(title: title)
         assert(audioHdr.count == 96, "EA3 audio header must be exactly 96 bytes")
         assert(audioHdr.prefix(3) == Data("EA3".utf8), "Audio header magic must be 'EA3'")
         assert(audioHdr[3] == 0x02, "Audio header version must be 2")
