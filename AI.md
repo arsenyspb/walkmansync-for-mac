@@ -1,31 +1,63 @@
-# AI Agent Development Instructions (Spec-Driven Workflow)
+# AI Agent Development Instructions — WalkmanSync for Mac
 
-## 1. Operating Principles
-You are an AI development agent executing a spec-driven port of a legacy Windows application to macOS. You must operate entirely through a test-driven pipeline, strictly adhering to the GitHub-centric issue and pull request workflow defined below. 
+## 1. Project Overview & Domain Context
+WalkmanSync for Mac is a zero-dependency, native macOS tool (Swift 5.9+, AppKit) engineered to manage music on 3rd-generation Sony Network Walkman devices (NW-E400/E500/HD series). It replaces obsolete Windows utilities (SonicStage) and legacy Java tools (JSymphonic) by directly communicating with the Walkman's native mass-storage filesystem.
 
-## 2. Environment & Tooling Standards
-All development must be standardized and reproducible:
-* **Makefiles:** Serve as the unified entry point for all build, test, and run commands.
-* **DevContainers:** Ensure local development isolation and reproducibility.
-* **Linters & CI:** Code must pass all strict linting and automated tests before a PR is opened.
-* **Platform:** The primary target is macOS. 
+The application operates in **dual-mode**:
+* **Native GUI (Default):** AppKit window with live USB volume auto-detection, music directory picker, and progress feedback.
+* **Transparent CLI:** Headless CLI for scripting and automation with `--sync`, `--detect`, `--scan`, `--clean`, `--dry-run`, and `--json` support.
 
-## 3. Scope & Evaluation Workflow (Strictly Enforced)
-You are not permitted to write application code until the scope and evaluation metrics are documented in GitHub Issues.
+### Core Device Specifications & Protocols:
+* **Filesystem Structure:**
+  * `OMGAUDIO/`: Destination for audio containers and database files.
+    * `10Fxx/1000xxxx.OMA`: Encrypted audio tracks (max 256 tracks per directory, indexed by `trackId`).
+    * Full database suite: `00GTRLST.DAT`, `01TREE01.DAT`..`04.DAT`, `02TREINF.DAT`, `03GINF01.DAT`..`04.DAT`, `04CNTINF.DAT`, `05CIDLST.DAT`.
+  * `MP3FM/`: Contains `DvID.DAT`, a 16-byte device identity file.
+* **OpenMG 3rd-Gen Cryptography:**
+  * **Device Key:** Stored at byte offset `0x0A..0x0D` of `DvID.DAT`. Default factory key: `0x08DA6D03`.
+  * **Track XOR Key Formula:**
+    `key = ((0x2465 + UInt64(trackId) * 0x5296E435) & 0xFFFFFFFF) ^ deviceKey`
+  * **Scrambling:** In-place 8-byte repeating XOR block applied to raw audio frames (ID3v2 tags stripped).
+* **OMA / EA3 Container Format:**
+  * **EA3 ID3v2 Tag:** Exactly 3072 bytes (`ea3\x03\x00\x00`), syncsafe header, standard ID3 frames + custom `OMG_TRACK` and `OMG_TRLDA` frames.
+  * **EA3 Audio Header:** Exactly 96 bytes (`EA3\x02\x00\x60\xFF\xFE`), protection marker `0xFFFE`, MP3 codec ID `0x03`.
 
-1. **Issue Creation (`gh` CLI):** 
-   * For every feature, refactor, or porting step, use the `gh issue create` command to generate a long-horizon, detailed checklist.
-   * Each issue must contain a strict "Evaluation Criteria" section defining exactly how the code will be tested and verified on a Mac environment.
-2. **Execution Block:** 
-   * Do not write or modify application logic until the evaluation details in the corresponding GitHub issue are locked and achievable.
-   * Drive all changes through a test-driven pipeline, ensuring the tests match the issue's evaluation checklist.
-3. **Pull Requests (`gh` CLI):** 
-   * Once evaluation criteria are achieved, bundle the changes into a Pull Request using `gh pr create`.
-   * The PR description must be detailed, directly linking to the issue, and explicitly explaining how the code changes satisfy the original checklist.
+---
 
-## 4. Platform & Build Constraints
-* **Target OS:** macOS (Primary) / Cross-platform.
-* **Build Artifacts:** Must compile into a self-sufficient, easily runnable artifact (e.g., runnable JAR, shell-wrapped binary, or GraalVM executable).
-* **Release Pipeline:** The repository must use GitHub Actions to automate the build and push artifacts to a public GitHub Release.
-* **Code Signing Bypass:** As this project operates without an Apple Developer Program subscription, the build process must not rely on official macOS notarization. 
-* **Distribution:** Release notes and documentation must include clear instructions for the end-user on how to bypass Gatekeeper warnings (e.g., via standard `xattr -d com.apple.quarantine <file>` commands or `Ctrl+Click -> Open` execution) for ad-hoc signed or unsigned binaries.
+## 2. Environment & Tooling
+* **Language & Runtime:** Swift 5.9+ targeting macOS 12.0+ (`darwin`).
+* **Frameworks:** Native `Foundation`, `AppKit`, `AVFoundation` (metadata extraction).
+* **Dependencies:** Zero external dependencies (no third-party packages, no Java, no VMs).
+* **Dev Environment:** Native macOS with Xcode Command Line Tools. (Linux DevContainers are not supported due to macOS AppKit/AVFoundation requirements).
+* **Build Tools:**
+  * `make test`: Compiles and executes `Tests/TestRunner.swift`.
+  * `make build`: Compiles `WalkmanSync.app` into `WalkmanSync/WalkmanSync.app`.
+  * `make run`: Compiles and launches `WalkmanSync.app`.
+  * `make clean`: Removes binaries, build artifacts, and generated `.app` bundles.
+
+---
+
+## 3. Architecture & Module Map
+* `WalkmanSync/Sources/WalkmanSyncApp.swift`: Main entry point (`WalkmanSyncMain`), routes to CLI or GUI mode, handles AppKit UI lifecycle, dynamic dock icon, and periodic USB volume detection.
+* `WalkmanSync/Sources/CLIHandler.swift`: Command-line interface parser supporting `--detect`, `--scan`, `--sync`, `--clean`, `--dry-run`, `--json`, and `--verbose`.
+* `WalkmanSync/Sources/SyncEngine.swift`: Enumerates local MP3 files, extracts metadata via `AVFoundation`, prepares directories, drives OMA conversion, and manages the sync pipeline.
+* `WalkmanSync/Sources/OMAContainerBuilder.swift`: Strips MP3 ID3 tags, constructs the 3072-byte `ea3` tag, 96-byte `EA3` header, and assembles the encrypted `.OMA` payload.
+* `WalkmanSync/Sources/WalkmanDBGenerator.swift`: Generates the complete 8-table (12 files) OMGAUDIO database suite (`00GTRLST`, `01TREE01..04`, `02TREINF`, `03GINF01..04`, `04CNTINF`, `05CIDLST`) with UTF-16BE metadata strings and group relationships.
+* `WalkmanSync/Sources/WalkmanKeyManager.swift`: Handles `DvID.DAT` discovery/generation, XOR key derivation, and buffer scrambling.
+* `WalkmanSync/Sources/WalkmanLogger.swift`: Thread-safe file and console logging stored at `~/Library/Logs/WalkmanSync/walkmansync.log`.
+* `Tests/TestRunner.swift`: Self-contained verification suite checking key derivation, XOR round-trip, EA3 tag/header structural integrity, DvID I/O, and database generation.
+
+---
+
+## 4. Development & Testing Principles
+1. **Zero External Dependencies:** Do not introduce third-party Swift packages or external binaries unless explicitly approved.
+2. **Hardware Compatibility & Round-Trip Verification:** Any modification to cryptographic routines, OMA container headers, or binary DB serialization must be accompanied by tests in `Tests/TestRunner.swift`.
+3. **Non-Destructive Device Operations:** Do not format or erase user files on connected volumes outside the managed `OMGAUDIO/` and `MP3FM/` folders.
+4. **Validation Routine:** Always run `make test` before submitting changes. Ensure `make build` compiles with zero warnings.
+
+---
+
+## 5. Known Limitations & Technical Roadmap
+* **Bitrate Assumptions:** Currently hardcoded to 128 kbps CBR in `OMAContainerBuilder.buildEA3AudioHeader` (`0xD9`) and `WalkmanDBGenerator.writeCNFBelement`. Support for dynamic bitrates (VBR/CBR header inspection) is an active area for improvement.
+* **Volume Auto-Detection:** Currently looks for `/Volumes/WALKMAN` or mounted volumes containing `OMGAUDIO`.
+* **ATRAC Transcoding:** Future enhancement if modern ATRAC encoders are integrated.
