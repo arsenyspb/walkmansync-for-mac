@@ -70,17 +70,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         walkmanPathLabel.textColor = .gray
         contentView.addSubview(walkmanPathLabel)
         
-        let walkmanBtn = NSButton(title: "Select", target: self, action: #selector(selectWalkman))
+        let walkmanBtn = NSButton(title: "Browse...", target: self, action: #selector(selectWalkman))
         walkmanBtn.frame = NSMakeRect(390, 125, 90, 30)
         contentView.addSubview(walkmanBtn)
         
-        // Auto-detect connected Walkman at /Volumes/WALKMAN
-        let defaultWalkman = URL(fileURLWithPath: "/Volumes/WALKMAN")
-        if FileManager.default.fileExists(atPath: defaultWalkman.path) {
-            walkmanUrl = defaultWalkman
-            walkmanPathLabel.stringValue = "/Volumes/WALKMAN (Connected)"
-            walkmanPathLabel.textColor = .systemGreen
-        }
+        // Auto-detect connected Walkman across /Volumes
+        autoDetectWalkman()
         
         // --- Status ---
         statusLabel = NSTextField(labelWithString: "Ready")
@@ -101,11 +96,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
     
+    private func autoDetectWalkman() {
+        let fm = FileManager.default
+        let volumesURL = URL(fileURLWithPath: "/Volumes")
+        if let volumes = try? fm.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: nil) {
+            for vol in volumes {
+                let name = vol.lastPathComponent.uppercased()
+                let hasOmgAudio = fm.fileExists(atPath: vol.appendingPathComponent("OMGAUDIO").path)
+                if name == "WALKMAN" || hasOmgAudio {
+                    walkmanUrl = vol
+                    walkmanPathLabel.stringValue = "\(vol.path) (Connected)"
+                    walkmanPathLabel.textColor = .systemGreen
+                    return
+                }
+            }
+        }
+        
+        // Fallback check
+        let defaultWalkman = URL(fileURLWithPath: "/Volumes/WALKMAN")
+        if fm.fileExists(atPath: defaultWalkman.path) {
+            walkmanUrl = defaultWalkman
+            walkmanPathLabel.stringValue = "/Volumes/WALKMAN (Connected)"
+            walkmanPathLabel.textColor = .systemGreen
+        }
+    }
+    
     @objc func selectSource() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.prompt = "Choose Music Folder"
+        panel.message = "Select a folder containing your music (MP3, FLAC, M4A)"
         if panel.runModal() == .OK {
             sourceUrl = panel.url
             if let url = sourceUrl {
@@ -129,12 +150,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
-        panel.prompt = "Choose Walkman Volume"
+        panel.directoryURL = URL(fileURLWithPath: "/Volumes")
+        panel.prompt = "Select Volume"
+        panel.message = "Select your mounted Walkman drive from /Volumes"
         if panel.runModal() == .OK {
-            walkmanUrl = panel.url
-            walkmanPathLabel.stringValue = walkmanUrl?.path ?? ""
-            walkmanPathLabel.textColor = .labelColor
-            updateSyncButton()
+            if let url = panel.url {
+                walkmanUrl = url
+                let hasOmgAudio = FileManager.default.fileExists(atPath: url.appendingPathComponent("OMGAUDIO").path)
+                let suffix = hasOmgAudio ? " (Walkman Detected)" : " (Selected)"
+                walkmanPathLabel.stringValue = "\(url.path)\(suffix)"
+                walkmanPathLabel.textColor = .systemGreen
+                updateSyncButton()
+            }
         }
     }
     
