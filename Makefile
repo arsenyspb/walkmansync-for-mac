@@ -13,6 +13,7 @@ clean:
 test:
 	@mkdir -p bin
 	@swiftc -parse-as-library \
+		WalkmanSync/Sources/WalkmanLogger.swift \
 		WalkmanSync/Sources/WalkmanKeyManager.swift \
 		WalkmanSync/Sources/OMAContainerBuilder.swift \
 		WalkmanSync/Sources/WalkmanDBGenerator.swift \

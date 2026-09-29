@@ -104,12 +104,14 @@ public class SyncEngine {
         destination: URL,
         progressCallback: ((String) -> Void)? = nil
     ) throws {
+        WalkmanLogger.info("Starting file transfer to Walkman at \(destination.path)")
         let fm = FileManager.default
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
         try fm.createDirectory(at: omgAudioDir, withIntermediateDirectories: true, attributes: nil)
         
         // 1. Resolve or generate device encryption key in MP3FM/DvID.DAT
         let deviceKey = WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destination)
+        WalkmanLogger.info("Resolved Device Key: 0x\(String(format: "%08X", deviceKey))")
         let ffmpegPath = findFFmpeg()
         
         // 2. Process each track into 10Fxx/1000xxxx.OMA
@@ -122,6 +124,7 @@ public class SyncEngine {
             
             if ext != "mp3" {
                 guard let ffmpeg = ffmpegPath else {
+                    WalkmanLogger.error("FFmpeg missing for transcoding \(title.titleName).\(ext)")
                     throw NSError(
                         domain: "WalkmanSync",
                         code: 1,
@@ -130,6 +133,7 @@ public class SyncEngine {
                 }
                 
                 progressCallback?("[\(index + 1)/\(titles.count)] Converting \(title.titleName) (\(ext.uppercased()) → MP3)...")
+                WalkmanLogger.info("[\(index + 1)/\(titles.count)] Transcoding \(sourceURL.lastPathComponent) via FFmpeg")
                 let tempDir = fm.temporaryDirectory.appendingPathComponent("WalkmanSyncTemp", isDirectory: true)
                 try fm.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
                 let tempFile = tempDir.appendingPathComponent("\(UUID().uuidString).mp3")
@@ -143,6 +147,7 @@ public class SyncEngine {
                 process.waitUntilExit()
                 
                 guard process.terminationStatus == 0 && fm.fileExists(atPath: tempFile.path) else {
+                    WalkmanLogger.error("FFmpeg failed to transcode \(sourceURL.path)")
                     throw NSError(
                         domain: "WalkmanSync",
                         code: 2,
@@ -169,14 +174,28 @@ public class SyncEngine {
             let destOMAURL = trackDir.appendingPathComponent(fileName)
             
             progressCallback?("[\(index + 1)/\(titles.count)] Encrypting & writing \(title.titleName)...")
+            WalkmanLogger.info("Encrypting OMA Track #\(title.id): \(title.titleName) -> \(dirName)/\(fileName)")
             let omaData = try OMAContainerBuilder.createEncryptedOMA(
                 title: title,
                 sourceMP3URL: mp3URL,
                 deviceKey: deviceKey
             )
             
-            try omaData.write(to: destOMAURL, options: .atomic)
-            print("Wrote encrypted OMA (\(omaData.count) bytes) to \(dirName)/\(fileName)")
+            try omaData.write(to: destOMAURL)
+            WalkmanLogger.info("Wrote \(dirName)/\(fileName) (\(omaData.count) bytes)")
         }
+        
+        // Clean AppleDouble (._*) files and sync disk buffers
+        cleanAppleDouble(at: destination)
+        sync()
+    }
+    
+    /// Cleans macOS AppleDouble dot-underscore files (._*) which confuse legacy embedded hardware
+    public static func cleanAppleDouble(at url: URL) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/dot_clean")
+        p.arguments = ["-m", url.path]
+        try? p.run()
+        p.waitUntilExit()
     }
 }

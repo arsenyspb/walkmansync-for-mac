@@ -103,12 +103,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Auto-detect connected Walkman across /Volumes
         autoDetectWalkman()
         
-        // --- Status ---
+        // --- Status & Logs ---
         statusLabel = NSTextField(labelWithString: "Ready")
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.frame = NSMakeRect(20, 85, 480, 20)
         contentView.addSubview(statusLabel)
+        
+        let logButton = NSButton(title: "View Logs", target: self, action: #selector(openLogs))
+        logButton.bezelStyle = .inline
+        logButton.font = NSFont.systemFont(ofSize: 10)
+        logButton.frame = NSMakeRect(420, 25, 80, 24)
+        contentView.addSubview(logButton)
         
         // --- Sync Button ---
         syncButton = NSButton(title: "Sync to Walkman", target: self, action: #selector(startSync))
@@ -195,9 +201,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         syncButton.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
     }
     
+    @objc func openLogs() {
+        WalkmanLogger.openLogInConsole()
+    }
+    
     @objc func startSync() {
         guard let source = sourceUrl, let destination = walkmanUrl else { return }
         
+        WalkmanLogger.info("Sync started from source: \(source.path) to Walkman: \(destination.path)")
         syncButton.isEnabled = false
         statusLabel.stringValue = "Scanning files..."
         
@@ -206,12 +217,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 // 1. Scan for Music and Read ID3 Tags
                 let titles = SyncEngine.scanForMusic(in: source)
                 guard !titles.isEmpty else {
+                    WalkmanLogger.warn("No audio files found in: \(source.path)")
                     DispatchQueue.main.async {
                         self.statusLabel.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
                         self.syncButton.isEnabled = true
                     }
                     return
                 }
+                
+                WalkmanLogger.info("Scanned \(titles.count) tracks from source")
                 
                 DispatchQueue.main.async {
                     self.statusLabel.stringValue = "Starting sync for \(titles.count) tracks..."
@@ -225,19 +239,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Building Walkman Database..."
+                    self.statusLabel.stringValue = "Building hardware-accurate Walkman database..."
                 }
                 
-                // 3. Generate the DB files with 3rd Gen encryption flags
+                // 3. Generate all 8 OMGAUDIO database files
                 let generator = WalkmanDBGenerator(isEncrypted3rdGen: true)
                 try generator.generateDatabase(titles: titles, destination: destination)
                 
+                WalkmanLogger.info("Sync completed successfully for \(titles.count) tracks!")
                 DispatchQueue.main.async {
                     self.statusLabel.stringValue = "Sync Complete (\(titles.count) tracks synced)!"
                     self.syncButton.isEnabled = true
                 }
                 
             } catch {
+                WalkmanLogger.error("Sync error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.statusLabel.stringValue = "Error: \(error.localizedDescription)"
                     self.syncButton.isEnabled = true
@@ -259,6 +275,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit WalkmanSync", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
+        
+        // Help / Logs Menu
+        let helpMenuItem = NSMenuItem()
+        mainMenu.addItem(helpMenuItem)
+        let helpMenu = NSMenu(title: "Help")
+        helpMenu.addItem(NSMenuItem(title: "Open Log File in Console", action: #selector(openLogs), keyEquivalent: "l"))
+        helpMenu.addItem(NSMenuItem(title: "Reveal Log File in Finder", action: #selector(revealLogs), keyEquivalent: "L"))
+        helpMenuItem.submenu = helpMenu
+        
         NSApp.mainMenu = mainMenu
+    }
+    
+    @objc func revealLogs() {
+        WalkmanLogger.openLogInFinder()
     }
 }

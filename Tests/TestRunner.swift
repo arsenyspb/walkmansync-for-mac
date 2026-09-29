@@ -7,6 +7,7 @@ struct TestRunner {
         testScrambleRoundTrip()
         testEA3TagAndHeader()
         testDvidDataGeneration()
+        testFullDatabaseSuiteGeneration()
         print("ALL TESTS PASSED!")
     }
 
@@ -74,5 +75,45 @@ struct TestRunner {
         assert(readKey == key, "DvID read key mismatch: got \(String(describing: readKey)), expected \(key)")
         try? FileManager.default.removeItem(at: tempURL)
         print("DvID.DAT generation & parsing PASSED")
+    }
+
+    static func testFullDatabaseSuiteGeneration() {
+        print("Testing Full OMGAUDIO Database Suite generation...")
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("OMGAUDIOTest_\(UUID().uuidString)")
+        let titles = [
+            WalkmanDBGenerator.WalkmanTitle(id: 1, titleName: "Song A", artistName: "Artist 1", albumName: "Album X", genre: "Rock", length: 200),
+            WalkmanDBGenerator.WalkmanTitle(id: 2, titleName: "Song B", artistName: "Artist 1", albumName: "Album X", genre: "Rock", length: 180),
+            WalkmanDBGenerator.WalkmanTitle(id: 3, titleName: "Song C", artistName: "Artist 2", albumName: "Album Y", genre: "Pop", length: 240)
+        ]
+        
+        let gen = WalkmanDBGenerator(isEncrypted3rdGen: true)
+        try! gen.generateDatabase(titles: titles, destination: tempDir)
+        
+        let expectedFiles = [
+            "00GTRLST.DAT",
+            "01TREE01.DAT",
+            "03GINF01.DAT",
+            "01TREE02.DAT",
+            "03GINF02.DAT",
+            "01TREE03.DAT",
+            "03GINF03.DAT",
+            "01TREE04.DAT",
+            "03GINF04.DAT",
+            "02TREINF.DAT",
+            "04CNTINF.DAT",
+            "05CIDLST.DAT"
+        ]
+        
+        let omgDir = tempDir.appendingPathComponent("OMGAUDIO")
+        for f in expectedFiles {
+            let fileURL = omgDir.appendingPathComponent(f)
+            assert(FileManager.default.fileExists(atPath: fileURL.path), "Missing expected DB file: \(f)")
+            let attrs = try! FileManager.default.attributesOfItem(atPath: fileURL.path)
+            let size = attrs[.size] as? Int ?? 0
+            assert(size > 0, "DB file \(f) is empty")
+        }
+        
+        try? FileManager.default.removeItem(at: tempDir)
+        print("Full OMGAUDIO Database Suite generation PASSED (all 12 DAT tables verified)")
     }
 }
