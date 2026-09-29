@@ -42,7 +42,8 @@ Historically, managing music on 3rd-generation Sony Walkmans required running de
   - Encapsulates MP3 tracks into valid `.OMA` containers featuring the standard 3072-byte `ea3` ID3v2 tag and 96-byte `EA3` audio header (`0xFFFE` encryption marker).
 - **Native macOS App (Swift & AppKit)**: Zero Java runtime dependency, zero virtual machines. Blazing-fast execution and native UI.
 - **Automatic Walkman Mount Detection**: Immediately identifies connected Walkmans mounted at `/Volumes/WALKMAN`.
-- **Native Metadata Extraction**: Uses macOS `AVFoundation` for instant extraction of track title, artist, album, genre, and duration.
+- **Universal Audio Ingest & Transcoding**: Syncs native MP3s directly, or automatically transcodes **FLAC, M4A (AAC/ALAC), WAV, AIFF, and OGG** to 320kbps MP3 on-the-fly via FFmpeg.
+- **Native Metadata Extraction**: Uses macOS `AVFoundation` for instant extraction of track title, artist, album, genre, and duration across all audio formats.
 
 ---
 
