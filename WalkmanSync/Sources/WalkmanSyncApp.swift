@@ -1,6 +1,16 @@
 import Cocoa
 
 @main
+struct WalkmanSyncMain {
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.setActivationPolicy(.regular)
+        app.run()
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
     
@@ -14,6 +24,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var walkmanUrl: URL?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        setupMainMenu()
+        
         window = NSWindow(contentRect: NSMakeRect(0, 0, 500, 300),
                           styleMask: [.titled, .closable, .miniaturizable],
                           backing: .buffered,
@@ -159,5 +171,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+    
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
+    
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(NSMenuItem(title: "About WalkmanSync", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(title: "Quit WalkmanSync", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        appMenuItem.submenu = appMenu
+        NSApp.mainMenu = mainMenu
     }
 }

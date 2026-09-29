@@ -14,6 +14,7 @@ $(APP_DIR): $(SWIFT_FILES) Info.plist
 	@mkdir -p $(RESOURCES_DIR)
 	@cp Info.plist $(APP_DIR)/Contents/
 	@swiftc -parse-as-library -O -whole-module-optimization $(SWIFT_FILES) -o $(MACOS_DIR)/$(APP_NAME)
+	@codesign --force --deep --sign - $(APP_DIR)
 	@echo "Build complete. Output: $(APP_DIR)"
 
 Info.plist:
