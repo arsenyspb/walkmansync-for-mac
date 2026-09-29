@@ -3,7 +3,7 @@ import AVFoundation
 
 public class SyncEngine {
     
-    // Scans directory for MP3s and extracts metadata natively using AVFoundation
+    /// Scans directory for MP3s and extracts metadata using AVFoundation
     public static func scanForMusic(in folder: URL) -> [WalkmanDBGenerator.WalkmanTitle] {
         var titles: [WalkmanDBGenerator.WalkmanTitle] = []
         let fm = FileManager.default
@@ -41,7 +41,6 @@ public class SyncEngine {
                     }
                 }
                 
-                // Approximate length in seconds (Walkman DB expects track duration, mocked to 180s for speed if unreadable)
                 let duration = CMTimeGetSeconds(asset.duration)
                 let lengthInSeconds = duration > 0 ? Int(duration) : 180
                 
@@ -63,40 +62,41 @@ public class SyncEngine {
         return titles
     }
     
-    // Actually copy the files to the OMGAUDIO folder
-    public static func copyFilesToWalkman(titles: [WalkmanDBGenerator.WalkmanTitle], destination: URL) throws {
+    /// Transfers files to Walkman:
+    /// Resolves/generates DvID.DAT, wraps each track into encrypted .OMA, and places in OMGAUDIO/10Fxx/
+    public static func transferFilesToWalkman(
+        titles: [WalkmanDBGenerator.WalkmanTitle],
+        destination: URL,
+        progressCallback: ((String) -> Void)? = nil
+    ) throws {
+        let fm = FileManager.default
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
+        try fm.createDirectory(at: omgAudioDir, withIntermediateDirectories: true, attributes: nil)
         
-        // Walkmans typically split files into numbered subfolders, e.g. OMGAUDIO/10F00/10000001.OMA
-        // But for generic MP3 dropping, many generations accept them in root OMGAUDIO or just track IDs.
-        // We will mock the Sony naming convention: 10000001.OMA (though they are MP3s, Sony renames them)
+        // 1. Resolve or generate device encryption key in MP3FM/DvID.DAT
+        let deviceKey = WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destination)
         
-        let fm = FileManager.default
-        
+        // 2. Process each track into 10Fxx/1000xxxx.OMA
         for title in titles {
-            guard let originalUrl = title.originalFile else { continue }
+            guard let sourceURL = title.originalFile else { continue }
             
-            // Format ID into 8-digit Sony standard (e.g. 10000001)
-            let sonyFileName = String(format: "1%07d.OMA", title.id)
-            let destUrl = omgAudioDir.appendingPathComponent(sonyFileName)
+            let dirIndex = title.id / 256
+            let dirName = String(format: "10F%02X", dirIndex)
+            let trackDir = omgAudioDir.appendingPathComponent(dirName, isDirectory: true)
+            try fm.createDirectory(at: trackDir, withIntermediateDirectories: true, attributes: nil)
             
-            if fm.fileExists(atPath: destUrl.path) {
-                try fm.removeItem(at: destUrl)
-            }
-            try fm.copyItem(at: originalUrl, to: destUrl)
-            print("Copied \(title.titleName) to \(sonyFileName)")
+            let fileName = String(format: "1000%04X.OMA", title.id)
+            let destOMAURL = trackDir.appendingPathComponent(fileName)
+            
+            progressCallback?("Encrypting & writing \(title.titleName)...")
+            let omaData = try OMAContainerBuilder.createEncryptedOMA(
+                title: title,
+                sourceMP3URL: sourceURL,
+                deviceKey: deviceKey
+            )
+            
+            try omaData.write(to: destOMAURL, options: .atomic)
+            print("Wrote encrypted OMA (\(omaData.count) bytes) to \(dirName)/\(fileName)")
         }
-    }
-    
-    public static func installDVID(sourceDVID: URL, destination: URL) throws {
-        let mp3fmDir = destination.appendingPathComponent("MP3FM", isDirectory: true)
-        let destDVID = mp3fmDir.appendingPathComponent("DvID.DAT")
-        
-        let fm = FileManager.default
-        if fm.fileExists(atPath: destDVID.path) {
-            try fm.removeItem(at: destDVID)
-        }
-        try fm.copyItem(at: sourceDVID, to: destDVID)
-        print("Successfully injected DvID.DAT to Walkman MP3FM folder.")
     }
 }
