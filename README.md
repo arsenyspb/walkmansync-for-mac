@@ -8,6 +8,20 @@
   <strong>Native macOS SonicStage alternative for Sony Network Walkman (NW-E405 & NW-E400 series) with automated 3rd-generation OMGAUDIO database initialization and zero-friction MP3 music sync.</strong>
 </p>
 
+<p align="center">
+  <a href="https://github.com/arsenyspb/walkmansync-for-mac/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/arsenyspb/walkmansync-for-mac/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI%20Build" alt="CI Build Status" /></a>
+  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases"><img src="https://img.shields.io/github/v/release/arsenyspb/walkmansync-for-mac?style=for-the-badge&logo=apple&logoColor=white&color=007AFF" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Apple%20Silicon%20%26%20Intel-black?style=for-the-badge&logo=apple&logoColor=white" alt="Platform macOS" />
+  <img src="https://img.shields.io/badge/Swift-5.9+-FA7343?style=for-the-badge&logo=swift&logoColor=white" alt="Language Swift" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge" alt="License GPLv3" /></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Hardware-Sony%20NW--E400%20%7C%20NW--E500%20%7C%20NW--HD-002F6C?style=flat-square&logo=sony&logoColor=white" alt="Hardware Target" />
+  <img src="https://img.shields.io/badge/Protocol-3rd--Gen%20OMGAUDIO%20%7C%20OpenMG-orange?style=flat-square" alt="Protocol" />
+  <img src="https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Native)-success?style=flat-square" alt="Zero Dependencies" />
+</p>
+
 ---
 
 ## Overview
@@ -34,10 +48,11 @@ Historically, managing music on 3rd-generation Sony Walkmans required running de
 
 ## Supported Devices & Hardware Series
 
-- **Sony Network Walkman NW-E400 Series**: NW-E403 (256 MB), **NW-E405** (512 MB), NW-E407 (1 GB)
-- **Sony Network Walkman NW-E500 Series**: NW-E505, NW-E507
-- **Sony Network Walkman NW-HD Series**: NW-HD1, NW-HD3, NW-HD5 (OMGAUDIO database layout)
-- Other 3rd-generation and 4th-generation Sony Network Walkman players utilizing the `OMGAUDIO` hierarchy.
+| Series | Models | Generation | Database Format |
+|---|---|---|---|
+| **NW-E400 Series** | NW-E403 (256 MB), **NW-E405** (512 MB), NW-E407 (1 GB) | 3rd Gen Flash | OMGAUDIO / OpenMG XOR |
+| **NW-E500 Series** | NW-E505, NW-E507 | 3rd Gen Flash | OMGAUDIO / OpenMG XOR |
+| **NW-HD Series** | NW-HD1, NW-HD3, NW-HD5 | 3rd/4th Gen HDD | OMGAUDIO |
 
 *(Note: Designed for standard MP3 audio files. ATRAC support is part of the original protocol spec, but MP3 transcoding/transfer is prioritized for zero-dependency modern playback.)*
 
