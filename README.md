@@ -1,54 +1,66 @@
-# WalkmanSync for macOS
+# WalkmanSync for Mac
 
 <p align="center">
-  <img src="img/Sony%20Walkman%20NW-E405.jpeg" alt="Sony Walkman NW-E405" width="480" />
+  <img src="img/Sony%20Walkman%20NW-E405.jpeg" alt="Sony Network Walkman NW-E405" width="480" />
 </p>
 
-A lightweight, native macOS utility to sync MP3 audio tracks directly to classic **Sony Network Walkman** devices (such as the NW-E405, NW-E407, NW-E505, and NW-HD series) without requiring Windows, legacy SonicStage software, or Java runtimes.
+<p align="center">
+  <strong>Native macOS SonicStage alternative for Sony Network Walkman (NW-E405 & NW-E400 series) with automated 3rd-generation OMGAUDIO database initialization and zero-friction MP3 music sync.</strong>
+</p>
 
 ---
 
-## Features
+## Overview
 
-- **Native macOS App (Swift & AppKit)**: Fast and responsive with zero runtime dependencies. No JRE or Windows virtual machines needed.
-- **Auto-Detection**: Automatically detects connected Walkmans mounted at `/Volumes/WALKMAN`.
-- **Zero-Friction 3rd Generation Support**:
-  - Automatically manages `DvID.DAT` device keys without requiring user intervention.
-  - Native in-place XOR scrambling using Sony's key derivation formula:
+**WalkmanSync for Mac** is a standalone, native macOS port and modern **SonicStage alternative** engineered specifically for retro-tech enthusiasts and indie developers using classic **Sony Network Walkman** devices. 
+
+Historically, managing music on 3rd-generation Sony Walkmans required running deprecated Windows utilities, obsolete versions of Sony's **SonicStage**, or legacy Java tools like **JSymphonic** that depend on old JRE runtimes. WalkmanSync eliminates all friction by interacting directly with the proprietary **OMGAUDIO** file structure, handling 3rd-generation **OpenMG** device identification (`DvID.DAT`), generating big-endian database files, and performing hardware-accurate XOR audio scrambling natively on modern macOS (Apple Silicon & Intel).
+
+---
+
+## Key Features
+
+- **Direct OMGAUDIO Database Initialization**: Interacts directly with the on-device `OMGAUDIO` filesystem rather than wrapping an external library. Generates `04CNTINF.DAT` content databases with big-endian UTF-16BE metadata encoding.
+- **Zero-Friction 3rd-Generation OpenMG Support**:
+  - Automatically manages and injects the 16-byte `MP3FM/DvID.DAT` device identity key without needing Windows `CopyTool.exe`.
+  - Implements hardware-accurate in-place audio stream scrambling using Sony's key derivation formula:
     `key = ((0x2465 + trackId * 0x5296E435) & 0xFFFFFFFF) ^ deviceKey`
-  - Encapsulates MP3 tracks into valid `.OMA` containers with standard 3072-byte `ea3` ID3v2 tags and 96-byte `EA3` audio headers (`0xFFFE` encryption marker).
-- **Native Metadata Extraction**: Reads track titles, artists, albums, genres, and durations directly using macOS `AVFoundation`.
-- **Database Generation**: Generates Sony `OMGAUDIO/04CNTINF.DAT` content databases with big-endian UTF-16BE string encoding.
+  - Encapsulates MP3 tracks into valid `.OMA` containers featuring the standard 3072-byte `ea3` ID3v2 tag and 96-byte `EA3` audio header (`0xFFFE` encryption marker).
+- **Native macOS App (Swift & AppKit)**: Zero Java runtime dependency, zero virtual machines. Blazing-fast execution and native UI.
+- **Automatic Walkman Mount Detection**: Immediately identifies connected Walkmans mounted at `/Volumes/WALKMAN`.
+- **Native Metadata Extraction**: Uses macOS `AVFoundation` for instant extraction of track title, artist, album, genre, and duration.
 
 ---
 
-## Supported Devices
+## Supported Devices & Hardware Series
 
-- **Sony Network Walkman NW-E403 / NW-E405 / NW-E407** (3rd Generation Flash)
-- **Sony Network Walkman NW-E505 / NW-E507**
-- **Sony NW-HD1 / NW-HD3 / NW-HD5** (OMGAUDIO database format)
-- Other 3rd and 4th generation Sony Network Walkman players using the `OMGAUDIO` database structure.
+- **Sony Network Walkman NW-E400 Series**: NW-E403 (256 MB), **NW-E405** (512 MB), NW-E407 (1 GB)
+- **Sony Network Walkman NW-E500 Series**: NW-E505, NW-E507
+- **Sony Network Walkman NW-HD Series**: NW-HD1, NW-HD3, NW-HD5 (OMGAUDIO database layout)
+- Other 3rd-generation and 4th-generation Sony Network Walkman players utilizing the `OMGAUDIO` hierarchy.
+
+*(Note: Designed for standard MP3 audio files. ATRAC support is part of the original protocol spec, but MP3 transcoding/transfer is prioritized for zero-dependency modern playback.)*
 
 ---
 
 ## Installation & Download
 
-### Option 1: Download Pre-built Release (Recommended)
-Download the latest release archive from [GitHub Releases](https://github.com/arsenyspb/jsymphonic-mac-port/releases):
+### Option 1: Pre-built Release (Recommended)
+Download the latest pre-compiled build from [GitHub Releases](https://github.com/arsenyspb/walkmansync-for-mac/releases):
 1. Download `WalkmanSync.app.zip`.
-2. Double-click the zip archive to extract `WalkmanSync.app`.
-3. Move `WalkmanSync.app` to your `/Applications` folder.
+2. Extract the archive to get `WalkmanSync.app`.
+3. Move `WalkmanSync.app` into `/Applications`.
 4. Open the application.
 
 ### Option 2: Build From Source
-Building requires macOS with Xcode Command Line Tools installed:
+Building requires macOS with Xcode Command Line Tools:
 
 ```bash
 # Clone the repository
-git clone https://github.com/arsenyspb/jsymphonic-mac-port.git
-cd jsymphonic-mac-port
+git clone https://github.com/arsenyspb/walkmansync-for-mac.git
+cd walkmansync-for-mac
 
-# Run automated tests
+# Run the test suite
 make test
 
 # Build WalkmanSync.app
@@ -62,42 +74,42 @@ make run
 
 ## How to Use
 
-1. **Connect your Sony Walkman** to your Mac via USB. It will mount as a removable drive (e.g. `/Volumes/WALKMAN`).
-2. **Launch WalkmanSync**. It will automatically detect the mounted Walkman.
-3. Click **"Select"** under **Music Source** and choose the folder containing your MP3 files.
+1. **Connect your Sony Walkman** to your Mac via USB. The player will mount as a mass-storage drive (typically `/Volumes/WALKMAN`).
+2. **Launch WalkmanSync for Mac**. The app will detect the mounted Walkman automatically.
+3. Click **"Select"** under **Music Source** to pick your local folder of MP3 tracks.
 4. Click **"Sync to Walkman"**.
 5. WalkmanSync will:
-   - Read ID3 metadata from each track.
-   - Verify or create the device key file (`MP3FM/DvID.DAT`).
-   - Wrap and scramble tracks into `.OMA` files inside `OMGAUDIO/10Fxx/`.
-   - Generate the `04CNTINF.DAT` database.
-6. Eject the Walkman volume in Finder and enjoy your music!
+   - Extract ID3 metadata from all audio tracks.
+   - Initialize device identity and write `MP3FM/DvID.DAT` if not already present.
+   - Encapsulate and XOR-scramble raw audio frames into `OMGAUDIO/10Fxx/1000xxxx.OMA`.
+   - Serialize and write the `04CNTINF.DAT` database structure.
+6. Safely eject the Walkman volume in Finder and enjoy your music!
 
 ---
 
 ## Automated Test Suite
 
-A built-in test suite verifies cryptographic and container primitives:
+A built-in test suite verifies all cryptographic and container primitives:
 
 ```bash
 make test
 ```
 
-Tests verify:
-- 3rd Generation XOR key derivation against known hardware vectors.
+Verification covers:
+- 3rd-generation XOR key derivation against known Sony hardware vectors.
 - Symmetric XOR audio scrambling round-trip.
 - EA3 syncsafe tag and audio header byte structures.
-- Binary `DvID.DAT` key serialization and deserialization.
+- Binary `DvID.DAT` key serialization and extraction.
 
 ---
 
 ## Acknowledgments & Credits
 
-This project builds upon the hard work and reverse-engineering research of the open-source community:
+This project stands on the shoulders of dedicated reverse-engineering work by the open-source community:
 
-- **[JSymphonic](https://github.com/georgewoodall82/jsymphonic)** — Original open-source Java Sony Walkman manager by Patrick Balleux, Nicolas Cardoso De Castro, and Daniel Žalar (licensed under GNU GPLv3).
-- **[MP3FM](https://github.com/xaskasdf/MP3FM)** — Clean-room specification, `FORMAT.md`, and reverse-engineering of Sony's `OMGAUDIO` protocol by `xaskasdf` (released into the public domain via Unlicense).
-- **FFmpeg (`libavformat/oma.c`)** — Reference implementation for OMA and EA3 container demuxing.
+- **[JSymphonic](https://github.com/georgewoodall82/jsymphonic)** — The foundational open-source Java Sony Walkman manager created by Patrick Balleux, Nicolas Cardoso De Castro, and Daniel Žalar. JSymphonic pioneered community reverse-engineering of Sony's OMGAUDIO formats.
+- **[MP3FM](https://github.com/xaskasdf/MP3FM)** — Clean-room specification, `FORMAT.md`, and reverse-engineering of Sony's `OMGAUDIO` protocol by `xaskasdf`.
+- **FFmpeg (`libavformat/oma.c`)** — Reference implementation for OMA / EA3 container demuxing.
 
 ---
 
@@ -105,4 +117,4 @@ This project builds upon the hard work and reverse-engineering research of the o
 
 This project is licensed under the **GNU General Public License v3.0 (GPLv3)** in compliance and continuity with the original JSymphonic codebase. See the [LICENSE](LICENSE) file for the full license text.
 
-*Sony, Network Walkman, OpenMG, and SonicStage are trademarks of Sony Corporation. This software is an independent open-source tool and is not affiliated with or endorsed by Sony Corporation.*
+*Sony, Network Walkman, OpenMG, ATRAC, and SonicStage are registered trademarks of Sony Corporation. WalkmanSync for Mac is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Sony Corporation.*
