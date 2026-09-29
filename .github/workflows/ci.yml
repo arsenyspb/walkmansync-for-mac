@@ -1,31 +1,42 @@
-name: CI & Build Release
+name: CI & Automated Release
 
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main ]
 
 jobs:
   build-and-test:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run Test Suite
         run: make test
 
-      - name: Build WalkmanSync
+      - name: Build WalkmanSync Application
         run: make build
 
-      - name: Archive Application Bundle
+      - name: Package App Bundle
         run: |
           cd WalkmanSync
           zip -r WalkmanSync.app.zip WalkmanSync.app
 
-      - name: Upload Artifact
+      - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WalkmanSync.app
           path: WalkmanSync/WalkmanSync.app.zip
+
+      - name: Auto-Release on Git Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: WalkmanSync/WalkmanSync.app.zip
+          generate_release_notes: true

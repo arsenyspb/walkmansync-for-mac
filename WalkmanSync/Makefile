@@ -4,6 +4,7 @@ SWIFT_FILES = $(wildcard Sources/*.swift)
 APP_DIR = $(APP_NAME).app
 MACOS_DIR = $(APP_DIR)/Contents/MacOS
 RESOURCES_DIR = $(APP_DIR)/Contents/Resources
+VERSION = 0.1.0
 
 all: $(APP_DIR)
 
@@ -27,9 +28,9 @@ Info.plist:
 	@echo '    <key>CFBundleName</key>' >> Info.plist
 	@echo '    <string>$(APP_NAME)</string>' >> Info.plist
 	@echo '    <key>CFBundleVersion</key>' >> Info.plist
-	@echo '    <string>1.0</string>' >> Info.plist
+	@echo '    <string>$(VERSION)</string>' >> Info.plist
 	@echo '    <key>CFBundleShortVersionString</key>' >> Info.plist
-	@echo '    <string>1.0</string>' >> Info.plist
+	@echo '    <string>$(VERSION)</string>' >> Info.plist
 	@echo '    <key>LSMinimumSystemVersion</key>' >> Info.plist
 	@echo '    <string>10.15</string>' >> Info.plist
 	@echo '    <key>NSPrincipalClass</key>' >> Info.plist

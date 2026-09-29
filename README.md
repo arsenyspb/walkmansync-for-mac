@@ -35,8 +35,8 @@ A lightweight, native macOS utility to sync MP3 audio tracks directly to classic
 
 ### Option 1: Download Pre-built Release (Recommended)
 Download the latest `WalkmanSync.app.zip` from the [GitHub Releases](https://github.com/arsenyspb/jsymphonic-mac-port/releases) page:
-1. Download the release archive.
-2. Unzip `WalkmanSync.app`.
+1. Download the `WalkmanSync.app.zip` archive.
+2. Unzip the file to extract `WalkmanSync.app`.
 3. Move `WalkmanSync.app` to your `/Applications` folder.
 4. Launch the application!
 
@@ -48,7 +48,7 @@ Building requires macOS with Xcode Command Line Tools installed:
 git clone https://github.com/arsenyspb/jsymphonic-mac-port.git
 cd jsymphonic-mac-port
 
-# Run tests
+# Run test suite
 make test
 
 # Build WalkmanSync.app
@@ -77,7 +77,7 @@ make run
 
 ## Automated Test Suite
 
-A built-in test suite verifies the cryptographic and container primitives:
+A built-in test suite verifies cryptographic and container primitives:
 ```bash
 make test
 ```
@@ -91,15 +91,16 @@ Verifies:
 
 ## Acknowledgments & Credits
 
-This project builds upon reverse-engineering research and work done by the open-source community:
+This project builds upon the hard work and reverse-engineering research of the open-source community:
 
-- **[JSymphonic](https://github.com/georgewoodall82/jsymphonic)** — Original open-source Java Sony Walkman manager by Patrick Balleux, Nicolas Cardoso De Castro, and Daniel Žalar.
-- **[MP3FM](https://github.com/xaskasdf/MP3FM)** — Clean-room specification, `FORMAT.md`, and reverse-engineering of Sony's `OMGAUDIO` protocol by `xaskasdf`.
-- **FFmpeg (`libavformat/oma.c`)** — Reference implementation for OMA / EA3 container parsing.
+- **[JSymphonic](https://github.com/georgewoodall82/jsymphonic)** — Original open-source Java Sony Walkman manager by Patrick Balleux, Nicolas Cardoso De Castro, and Daniel Žalar (licensed under GNU GPLv3).
+- **[MP3FM](https://github.com/xaskasdf/MP3FM)** — Clean-room specification, `FORMAT.md`, and reverse-engineering of Sony's `OMGAUDIO` protocol by `xaskasdf` (released into the public domain via Unlicense).
+- **FFmpeg (`libavformat/oma.c`)** — Reference implementation for OMA / EA3 container demuxing.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
-Sony, Walkman, OpenMG, and SonicStage are registered trademarks of Sony Corporation. This software is an independent open-source project and is not affiliated with or endorsed by Sony Corporation.
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)** in compliance and continuity with the original JSymphonic codebase. See the [LICENSE](LICENSE) file for the full license text.
+
+*Sony, Network Walkman, OpenMG, and SonicStage are trademarks of Sony Corporation. This software is an independent open-source tool and is not affiliated with or endorsed by Sony Corporation.*
