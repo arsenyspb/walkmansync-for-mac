@@ -13,6 +13,7 @@ $(APP_DIR): $(SWIFT_FILES) Info.plist
 	@mkdir -p $(MACOS_DIR)
 	@mkdir -p $(RESOURCES_DIR)
 	@cp Info.plist $(APP_DIR)/Contents/
+	@cp -R Resources/* $(RESOURCES_DIR)/ 2>/dev/null || true
 	@swiftc -parse-as-library -O -whole-module-optimization $(SWIFT_FILES) -o $(MACOS_DIR)/$(APP_NAME)
 	@codesign --force --deep --sign - $(APP_DIR)
 	@echo "Build complete. Output: $(APP_DIR)"
@@ -28,6 +29,8 @@ Info.plist:
 	@echo '    <string>$(BUNDLE_ID)</string>' >> Info.plist
 	@echo '    <key>CFBundleName</key>' >> Info.plist
 	@echo '    <string>$(APP_NAME)</string>' >> Info.plist
+	@echo '    <key>CFBundleIconFile</key>' >> Info.plist
+	@echo '    <string>AppIcon</string>' >> Info.plist
 	@echo '    <key>CFBundleVersion</key>' >> Info.plist
 	@echo '    <string>$(VERSION)</string>' >> Info.plist
 	@echo '    <key>CFBundleShortVersionString</key>' >> Info.plist

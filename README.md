@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="img/walkman_logo.svg" alt="Sony Walkman Logo" width="220" />
+</p>
+
 # WalkmanSync for Mac
 
 <p align="center">

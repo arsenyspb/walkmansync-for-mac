@@ -26,52 +26,78 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMainMenu()
         
-        window = NSWindow(contentRect: NSMakeRect(0, 0, 500, 300),
+        // Set Dock Icon dynamically
+        if let iconUrl = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconUrl) {
+            NSApp.applicationIconImage = icon
+        }
+        
+        window = NSWindow(contentRect: NSMakeRect(0, 0, 520, 320),
                           styleMask: [.titled, .closable, .miniaturizable],
                           backing: .buffered,
                           defer: false)
         window.center()
-        window.title = "Walkman Sync (Native Mac Port)"
+        window.title = "Walkman Sync"
         
         let contentView = NSView(frame: window.contentRect(forFrameRect: window.frame))
         
+        // --- Walkman Official Logo ---
+        var logoImg: NSImage?
+        if let bundleUrl = Bundle.main.url(forResource: "walkman_logo", withExtension: "svg") {
+            logoImg = NSImage(contentsOf: bundleUrl)
+        } else if let localImg = NSImage(contentsOfFile: "WalkmanSync/Resources/walkman_logo.svg") ?? NSImage(contentsOfFile: "img/walkman_logo.svg") {
+            logoImg = localImg
+        }
+        
+        if let logo = logoImg {
+            logo.isTemplate = true
+            let logoView = NSImageView(frame: NSMakeRect(20, 246, 75, 40))
+            logoView.image = logo
+            logoView.imageScaling = .scaleProportionallyUpOrDown
+            // Iconic Walkman Signature Orange #F26522
+            logoView.contentTintColor = NSColor(red: 0.95, green: 0.40, blue: 0.13, alpha: 1.0)
+            contentView.addSubview(logoView)
+        }
+        
         let titleLabel = NSTextField(labelWithString: "Walkman Sync")
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 24)
-        titleLabel.frame = NSMakeRect(20, 240, 460, 30)
+        titleLabel.font = NSFont.boldSystemFont(ofSize: 22)
+        titleLabel.frame = NSMakeRect(105, 258, 395, 28)
         contentView.addSubview(titleLabel)
         
-        let subTitle = NSTextField(labelWithString: "Zero-friction native MP3 sync for Sony Network Walkman (NW-E40x)")
+        let subTitle = NSTextField(labelWithString: "Zero-friction native music sync for Sony Network Walkman")
         subTitle.font = NSFont.systemFont(ofSize: 11)
         subTitle.textColor = .secondaryLabelColor
-        subTitle.frame = NSMakeRect(20, 220, 460, 18)
+        subTitle.frame = NSMakeRect(105, 240, 395, 18)
         contentView.addSubview(subTitle)
         
         // --- Source Folder ---
         let sourceTitle = NSTextField(labelWithString: "Music Source:")
-        sourceTitle.frame = NSMakeRect(20, 175, 120, 20)
+        sourceTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        sourceTitle.frame = NSMakeRect(20, 185, 115, 20)
         contentView.addSubview(sourceTitle)
         
         sourcePathLabel = NSTextField(labelWithString: "Not Selected")
-        sourcePathLabel.frame = NSMakeRect(140, 175, 240, 20)
-        sourcePathLabel.textColor = .gray
+        sourcePathLabel.frame = NSMakeRect(140, 185, 260, 20)
+        sourcePathLabel.textColor = .secondaryLabelColor
         contentView.addSubview(sourcePathLabel)
         
         let sourceBtn = NSButton(title: "Select", target: self, action: #selector(selectSource))
-        sourceBtn.frame = NSMakeRect(390, 170, 90, 30)
+        sourceBtn.frame = NSMakeRect(410, 180, 90, 30)
         contentView.addSubview(sourceBtn)
         
         // --- Walkman Folder ---
         let walkmanTitle = NSTextField(labelWithString: "Walkman Volume:")
-        walkmanTitle.frame = NSMakeRect(20, 130, 120, 20)
+        walkmanTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        walkmanTitle.frame = NSMakeRect(20, 140, 115, 20)
         contentView.addSubview(walkmanTitle)
         
         walkmanPathLabel = NSTextField(labelWithString: "Not Selected")
-        walkmanPathLabel.frame = NSMakeRect(140, 130, 240, 20)
-        walkmanPathLabel.textColor = .gray
+        walkmanPathLabel.frame = NSMakeRect(140, 140, 260, 20)
+        walkmanPathLabel.textColor = .secondaryLabelColor
         contentView.addSubview(walkmanPathLabel)
         
         let walkmanBtn = NSButton(title: "Browse...", target: self, action: #selector(selectWalkman))
-        walkmanBtn.frame = NSMakeRect(390, 125, 90, 30)
+        walkmanBtn.frame = NSMakeRect(410, 135, 90, 30)
         contentView.addSubview(walkmanBtn)
         
         // Auto-detect connected Walkman across /Volumes
@@ -81,12 +107,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusLabel = NSTextField(labelWithString: "Ready")
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
-        statusLabel.frame = NSMakeRect(20, 80, 460, 20)
+        statusLabel.frame = NSMakeRect(20, 85, 480, 20)
         contentView.addSubview(statusLabel)
         
         // --- Sync Button ---
         syncButton = NSButton(title: "Sync to Walkman", target: self, action: #selector(startSync))
-        syncButton.frame = NSMakeRect(150, 25, 200, 40)
+        syncButton.frame = NSMakeRect(160, 25, 200, 42)
         syncButton.bezelStyle = .rounded
         syncButton.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
         contentView.addSubview(syncButton)
