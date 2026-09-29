@@ -105,10 +105,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.prompt = "Choose Music Folder"
         if panel.runModal() == .OK {
             sourceUrl = panel.url
-            sourcePathLabel.stringValue = sourceUrl?.path ?? ""
-            sourcePathLabel.textColor = .labelColor
+            if let url = sourceUrl {
+                let tracks = SyncEngine.scanForMusic(in: url)
+                let count = tracks.count
+                if count > 0 {
+                    sourcePathLabel.stringValue = "\(url.lastPathComponent) (\(count) track\(count == 1 ? "" : "s"))"
+                    sourcePathLabel.textColor = .labelColor
+                    statusLabel.stringValue = "Found \(count) audio track\(count == 1 ? "" : "s") ready to sync."
+                } else {
+                    sourcePathLabel.stringValue = "\(url.lastPathComponent) (0 tracks found)"
+                    sourcePathLabel.textColor = .systemRed
+                    statusLabel.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
+                }
+            }
             updateSyncButton()
         }
     }
@@ -117,6 +129,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.prompt = "Choose Walkman Volume"
         if panel.runModal() == .OK {
             walkmanUrl = panel.url
             walkmanPathLabel.stringValue = walkmanUrl?.path ?? ""
@@ -139,9 +152,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 // 1. Scan for Music and Read ID3 Tags
                 let titles = SyncEngine.scanForMusic(in: source)
+                guard !titles.isEmpty else {
+                    DispatchQueue.main.async {
+                        self.statusLabel.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
+                        self.syncButton.isEnabled = true
+                    }
+                    return
+                }
                 
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Transferring \(titles.count) files..."
+                    self.statusLabel.stringValue = "Starting sync for \(titles.count) tracks..."
                 }
                 
                 // 2. Transfer files with automated DvID key resolution & XOR scramble

@@ -3,7 +3,41 @@ import AVFoundation
 
 public class SyncEngine {
     
-    /// Scans directory for MP3s and extracts metadata using AVFoundation
+    public static let supportedAudioExtensions: Set<String> = [
+        "mp3", "m4a", "flac", "wav", "aiff", "aif", "aac", "alac", "ogg"
+    ]
+    
+    /// Finds FFmpeg executable on the host system
+    public static func findFFmpeg() -> String? {
+        let standardPaths = [
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg",
+            "/bin/ffmpeg"
+        ]
+        for path in standardPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        p.arguments = ["ffmpeg"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        try? p.run()
+        p.waitUntilExit()
+        if p.terminationStatus == 0 {
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !out.isEmpty && FileManager.default.isExecutableFile(atPath: out) {
+                return out
+            }
+        }
+        return nil
+    }
+    
+    /// Scans directory for supported audio files (MP3, FLAC, M4A, WAV, etc.) and extracts metadata
     public static func scanForMusic(in folder: URL) -> [WalkmanDBGenerator.WalkmanTitle] {
         var titles: [WalkmanDBGenerator.WalkmanTitle] = []
         let fm = FileManager.default
@@ -14,7 +48,8 @@ public class SyncEngine {
         }
         
         for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension.lowercased() == "mp3" {
+            let ext = fileURL.pathExtension.lowercased()
+            if supportedAudioExtensions.contains(ext) {
                 let asset = AVAsset(url: fileURL)
                 
                 var titleName = fileURL.deletingPathExtension().lastPathComponent
@@ -24,25 +59,24 @@ public class SyncEngine {
                 
                 let metadata = asset.metadata
                 for item in metadata {
-                    guard let commonKey = item.commonKey?.rawValue else { continue }
+                    let key = item.commonKey?.rawValue ?? (item.key as? String) ?? ""
                     let value = item.stringValue ?? ""
+                    if value.isEmpty { continue }
                     
-                    switch commonKey {
-                    case AVMetadataKey.commonKeyTitle.rawValue:
-                        titleName = value.isEmpty ? titleName : value
-                    case AVMetadataKey.commonKeyArtist.rawValue:
-                        artistName = value.isEmpty ? artistName : value
-                    case AVMetadataKey.commonKeyAlbumName.rawValue:
-                        albumName = value.isEmpty ? albumName : value
-                    case AVMetadataKey.commonKeyType.rawValue:
-                        genre = value.isEmpty ? genre : value
-                    default:
-                        break
+                    let lowerKey = key.lowercased()
+                    if lowerKey.contains("title") || key == AVMetadataKey.commonKeyTitle.rawValue {
+                        titleName = value
+                    } else if lowerKey.contains("artist") || key == AVMetadataKey.commonKeyArtist.rawValue {
+                        artistName = value
+                    } else if lowerKey.contains("album") || key == AVMetadataKey.commonKeyAlbumName.rawValue {
+                        albumName = value
+                    } else if lowerKey.contains("genre") || key == AVMetadataKey.commonKeyType.rawValue {
+                        genre = value
                     }
                 }
                 
                 let duration = CMTimeGetSeconds(asset.duration)
-                let lengthInSeconds = duration > 0 ? Int(duration) : 180
+                let lengthInSeconds = (duration > 0 && !duration.isNaN) ? Int(duration) : 180
                 
                 let wTitle = WalkmanDBGenerator.WalkmanTitle(
                     id: idCounter,
@@ -63,7 +97,8 @@ public class SyncEngine {
     }
     
     /// Transfers files to Walkman:
-    /// Resolves/generates DvID.DAT, wraps each track into encrypted .OMA, and places in OMGAUDIO/10Fxx/
+    /// Auto-transcodes non-MP3s (FLAC, M4A, etc.) to 320kbps MP3 on-the-fly via FFmpeg,
+    /// resolves/generates DvID.DAT, wraps each track into encrypted .OMA, and places in OMGAUDIO/10Fxx/
     public static func transferFilesToWalkman(
         titles: [WalkmanDBGenerator.WalkmanTitle],
         destination: URL,
@@ -75,10 +110,55 @@ public class SyncEngine {
         
         // 1. Resolve or generate device encryption key in MP3FM/DvID.DAT
         let deviceKey = WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destination)
+        let ffmpegPath = findFFmpeg()
         
         // 2. Process each track into 10Fxx/1000xxxx.OMA
-        for title in titles {
+        for (index, title) in titles.enumerated() {
             guard let sourceURL = title.originalFile else { continue }
+            
+            let ext = sourceURL.pathExtension.lowercased()
+            var mp3URL = sourceURL
+            var isTempMP3 = false
+            
+            if ext != "mp3" {
+                guard let ffmpeg = ffmpegPath else {
+                    throw NSError(
+                        domain: "WalkmanSync",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Track '\(title.titleName)' is .\(ext). Sony Walkman NW-E40x only plays MP3. Please install FFmpeg (brew install ffmpeg) to enable auto-conversion."]
+                    )
+                }
+                
+                progressCallback?("[\(index + 1)/\(titles.count)] Converting \(title.titleName) (\(ext.uppercased()) → MP3)...")
+                let tempDir = fm.temporaryDirectory.appendingPathComponent("WalkmanSyncTemp", isDirectory: true)
+                try fm.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
+                let tempFile = tempDir.appendingPathComponent("\(UUID().uuidString).mp3")
+                
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: ffmpeg)
+                process.arguments = ["-y", "-i", sourceURL.path, "-vn", "-c:a", "libmp3lame", "-b:a", "320k", tempFile.path]
+                process.standardOutput = Pipe()
+                process.standardError = Pipe()
+                try process.run()
+                process.waitUntilExit()
+                
+                guard process.terminationStatus == 0 && fm.fileExists(atPath: tempFile.path) else {
+                    throw NSError(
+                        domain: "WalkmanSync",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey: "FFmpeg conversion failed for '\(title.titleName)'."]
+                    )
+                }
+                
+                mp3URL = tempFile
+                isTempMP3 = true
+            }
+            
+            defer {
+                if isTempMP3 {
+                    try? fm.removeItem(at: mp3URL)
+                }
+            }
             
             let dirIndex = title.id / 256
             let dirName = String(format: "10F%02X", dirIndex)
@@ -88,10 +168,10 @@ public class SyncEngine {
             let fileName = String(format: "1000%04X.OMA", title.id)
             let destOMAURL = trackDir.appendingPathComponent(fileName)
             
-            progressCallback?("Encrypting & writing \(title.titleName)...")
+            progressCallback?("[\(index + 1)/\(titles.count)] Encrypting & writing \(title.titleName)...")
             let omaData = try OMAContainerBuilder.createEncryptedOMA(
                 title: title,
-                sourceMP3URL: sourceURL,
+                sourceMP3URL: mp3URL,
                 deviceKey: deviceKey
             )
             
