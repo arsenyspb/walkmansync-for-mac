@@ -98,22 +98,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         walkmanPathLabel.textColor = .systemOrange
         contentView.addSubview(walkmanPathLabel)
         
-        // Start continuous live device monitoring
-        startDeviceMonitoring()
-        
-        // --- Status & Logs ---
-        statusLabel = NSTextField(labelWithString: "Ready")
-        statusLabel.alignment = .center
-        statusLabel.textColor = .secondaryLabelColor
-        statusLabel.frame = NSMakeRect(20, 85, 480, 20)
-        contentView.addSubview(statusLabel)
-        
-        let logButton = NSButton(title: "View Logs", target: self, action: #selector(openLogs))
-        logButton.bezelStyle = .inline
-        logButton.font = NSFont.systemFont(ofSize: 10)
-        logButton.frame = NSMakeRect(420, 25, 80, 24)
-        contentView.addSubview(logButton)
-        
         // --- Sync Button ---
         syncButton = NSButton(title: "Sync to Walkman", target: self, action: #selector(startSync))
         syncButton.frame = NSMakeRect(160, 25, 200, 42)
@@ -124,6 +108,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = contentView
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        
+        // Start continuous live device monitoring after UI is ready
+        startDeviceMonitoring()
     }
     
     private func startDeviceMonitoring() {
@@ -217,7 +204,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func updateSyncButton() {
-        syncButton.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
+        syncButton?.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
     }
     
     @objc func openLogs() {
