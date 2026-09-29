@@ -1,0 +1,29 @@
+{
+  "" : {
+    "diagnostics" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSync-primary.dia",
+    "emit-module-dependencies" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSync-primary-emit-module.d",
+    "emit-module-diagnostics" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSync-primary-emit-module.dia",
+    "pch" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSync-primary-Bridging-header.pch",
+    "swift-dependencies" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSync-primary.swiftdeps"
+  },
+  "/private/tmp/jsymphonic-port/project_root/WalkmanSync/Sources/ContentView.swift" : {
+    "const-values" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/private/tmp/jsymphonic-port/project_root/WalkmanSync/Sources/WalkmanSyncApp.swift" : {
+    "const-values" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.swiftconstvalues",
+    "dependencies" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.d",
+    "diagnostics" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.dia",
+    "index-unit-output-path" : "/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.o",
+    "llvm-bc" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.bc",
+    "object" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.o",
+    "swift-dependencies" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp.swiftdeps",
+    "swiftmodule" : "/private/tmp/jsymphonic-port/project_root/WalkmanSync/.build/out/Intermediates.noindex/WalkmanSync.build/Debug/WalkmanSync-p.build/Objects-normal/arm64/WalkmanSyncApp~partial.swiftmodule"
+  }
+}
