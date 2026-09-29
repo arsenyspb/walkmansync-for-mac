@@ -20,9 +20,10 @@ public class WalkmanDBGenerator {
         var albumName: String
         var genre: String
         var length: Int
+        var originalFile: URL? // Added for file transfer tracking
     }
     
-    public func generateDatabase(mp3Files: [URL], destination: URL) throws {
+    public func generateDatabase(titles: [WalkmanTitle], destination: URL) throws {
         // Prepare OMGAUDIO structure
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
         try FileManager.default.createDirectory(at: omgAudioDir, withIntermediateDirectories: true, attributes: nil)
@@ -32,11 +33,9 @@ public class WalkmanDBGenerator {
             try FileManager.default.createDirectory(at: mp3fmDir, withIntermediateDirectories: true, attributes: nil)
         }
         
-        print("Ready to generate database for \(mp3Files.count) files.")
+        print("Ready to generate database for \(titles.count) files.")
         
-        let dummyTitles = [WalkmanTitle(id: 1, titleName: "Test Track", artistName: "Test Artist", albumName: "Test Album", genre: "Rock", length: 180)]
-        
-        try write04CNTINF(omgAudioDir: omgAudioDir, titles: dummyTitles)
+        try write04CNTINF(omgAudioDir: omgAudioDir, titles: titles)
     }
     
     // MARK: - Binary Serialization Implementation

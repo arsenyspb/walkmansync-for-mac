@@ -137,16 +137,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func startSync() {
-        syncButton.isEnabled = false
-        statusLabel.stringValue = "Syncing..."
+        guard let source = sourceUrl, let destination = walkmanUrl else { return }
         
-        // Stubbed Sync logic
+        syncButton.isEnabled = false
+        statusLabel.stringValue = "Scanning files..."
+        
         DispatchQueue.global(qos: .userInitiated).async {
-            sleep(2) // Simulate processing time
-            
-            DispatchQueue.main.async {
-                self.statusLabel.stringValue = "Sync Complete!"
-                self.syncButton.isEnabled = true
+            do {
+                // 1. Scan for Music and Read ID3 Tags
+                let titles = SyncEngine.scanForMusic(in: source)
+                
+                DispatchQueue.main.async {
+                    self.statusLabel.stringValue = "Transferring \(titles.count) files..."
+                }
+                
+                // 2. Install DvID.DAT if provided
+                if let dvid = self.dvidUrl {
+                    try SyncEngine.installDVID(sourceDVID: dvid, destination: destination)
+                }
+                
+                // 3. Copy MP3s to OMGAUDIO
+                try SyncEngine.copyFilesToWalkman(titles: titles, destination: destination)
+                
+                DispatchQueue.main.async {
+                    self.statusLabel.stringValue = "Building Walkman Database..."
+                }
+                
+                // 4. Generate the DB files
+                let generator = WalkmanDBGenerator(dvidFile: self.dvidUrl)
+                try generator.generateDatabase(titles: titles, destination: destination)
+                
+                DispatchQueue.main.async {
+                    self.statusLabel.stringValue = "Sync Complete!"
+                    self.syncButton.isEnabled = true
+                }
+                
+            } catch {
+                DispatchQueue.main.async {
+                    self.statusLabel.stringValue = "Error: \(error.localizedDescription)"
+                    self.syncButton.isEnabled = true
+                }
             }
         }
     }
