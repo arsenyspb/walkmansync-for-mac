@@ -24,4 +24,14 @@ test:
 run:
 	$(MAKE) -C WalkmanSync run
 
-.PHONY: all build clean test run
+cli: build
+	@mkdir -p bin
+	@ln -sf ../WalkmanSync/WalkmanSync.app/Contents/MacOS/WalkmanSync bin/walkmansync
+	@echo "CLI symlinked to bin/walkmansync"
+
+install-cli: build
+	@mkdir -p $(HOME)/.local/bin
+	@ln -sf $(PWD)/WalkmanSync/WalkmanSync.app/Contents/MacOS/WalkmanSync $(HOME)/.local/bin/walkmansync
+	@echo "Installed to $(HOME)/.local/bin/walkmansync"
+
+.PHONY: all build clean test run cli install-cli

@@ -3,11 +3,15 @@ import Cocoa
 @main
 struct WalkmanSyncMain {
     static func main() {
-        let app = NSApplication.shared
-        let delegate = AppDelegate()
-        app.delegate = delegate
-        app.setActivationPolicy(.regular)
-        app.run()
+        if CLIHandler.shouldHandleCLI() {
+            CLIHandler.run()
+        } else {
+            let app = NSApplication.shared
+            let delegate = AppDelegate()
+            app.delegate = delegate
+            app.setActivationPolicy(.regular)
+            app.run()
+        }
     }
 }
 

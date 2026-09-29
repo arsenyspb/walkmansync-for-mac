@@ -195,6 +195,8 @@ public class SyncEngine {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/sbin/dot_clean")
         p.arguments = ["-m", url.path]
+        p.standardError = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
         try? p.run()
         p.waitUntilExit()
     }
