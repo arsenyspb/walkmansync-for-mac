@@ -1,4 +1,0 @@
-Target dependency graph (2 targets)
-Target 'AllExcludingTests' in project 'Aggregate'
-➜ Explicit dependency on target 'WalkmanSync-product' in project 'WalkmanSync'
-Target 'WalkmanSync-product' in project 'WalkmanSync' (no dependencies)
