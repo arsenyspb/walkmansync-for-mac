@@ -7,16 +7,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // UI Elements
     var sourcePathLabel: NSTextField!
     var walkmanPathLabel: NSTextField!
-    var dvidPathLabel: NSTextField!
     var syncButton: NSButton!
     var statusLabel: NSTextField!
     
     var sourceUrl: URL?
     var walkmanUrl: URL?
-    var dvidUrl: URL?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        window = NSWindow(contentRect: NSMakeRect(0, 0, 500, 350),
+        window = NSWindow(contentRect: NSMakeRect(0, 0, 500, 300),
                           styleMask: [.titled, .closable, .miniaturizable],
                           backing: .buffered,
                           defer: false)
@@ -27,69 +25,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         let titleLabel = NSTextField(labelWithString: "Walkman Sync")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 24)
-        titleLabel.frame = NSMakeRect(20, 290, 460, 30)
+        titleLabel.frame = NSMakeRect(20, 240, 460, 30)
         contentView.addSubview(titleLabel)
+        
+        let subTitle = NSTextField(labelWithString: "Zero-friction native MP3 sync for Sony Network Walkman (NW-E40x)")
+        subTitle.font = NSFont.systemFont(ofSize: 11)
+        subTitle.textColor = .secondaryLabelColor
+        subTitle.frame = NSMakeRect(20, 220, 460, 18)
+        contentView.addSubview(subTitle)
         
         // --- Source Folder ---
         let sourceTitle = NSTextField(labelWithString: "Music Source:")
-        sourceTitle.frame = NSMakeRect(20, 240, 120, 20)
+        sourceTitle.frame = NSMakeRect(20, 175, 120, 20)
         contentView.addSubview(sourceTitle)
         
         sourcePathLabel = NSTextField(labelWithString: "Not Selected")
-        sourcePathLabel.frame = NSMakeRect(140, 240, 240, 20)
+        sourcePathLabel.frame = NSMakeRect(140, 175, 240, 20)
         sourcePathLabel.textColor = .gray
         contentView.addSubview(sourcePathLabel)
         
         let sourceBtn = NSButton(title: "Select", target: self, action: #selector(selectSource))
-        sourceBtn.frame = NSMakeRect(390, 235, 90, 30)
+        sourceBtn.frame = NSMakeRect(390, 170, 90, 30)
         contentView.addSubview(sourceBtn)
         
         // --- Walkman Folder ---
         let walkmanTitle = NSTextField(labelWithString: "Walkman Volume:")
-        walkmanTitle.frame = NSMakeRect(20, 190, 120, 20)
+        walkmanTitle.frame = NSMakeRect(20, 130, 120, 20)
         contentView.addSubview(walkmanTitle)
         
         walkmanPathLabel = NSTextField(labelWithString: "Not Selected")
-        walkmanPathLabel.frame = NSMakeRect(140, 190, 240, 20)
+        walkmanPathLabel.frame = NSMakeRect(140, 130, 240, 20)
         walkmanPathLabel.textColor = .gray
         contentView.addSubview(walkmanPathLabel)
         
         let walkmanBtn = NSButton(title: "Select", target: self, action: #selector(selectWalkman))
-        walkmanBtn.frame = NSMakeRect(390, 185, 90, 30)
+        walkmanBtn.frame = NSMakeRect(390, 125, 90, 30)
         contentView.addSubview(walkmanBtn)
         
-        // --- DvID.DAT ---
-        let dvidTitle = NSTextField(labelWithString: "DvID.DAT Key:")
-        dvidTitle.frame = NSMakeRect(20, 140, 120, 20)
-        contentView.addSubview(dvidTitle)
-        
-        dvidPathLabel = NSTextField(labelWithString: "Optional (3rd Gen)")
-        dvidPathLabel.frame = NSMakeRect(140, 140, 240, 20)
-        dvidPathLabel.textColor = .gray
-        contentView.addSubview(dvidPathLabel)
-        
-        let dvidBtn = NSButton(title: "Select", target: self, action: #selector(selectDvID))
-        dvidBtn.frame = NSMakeRect(390, 135, 90, 30)
-        contentView.addSubview(dvidBtn)
-        
-        let dvidNote = NSTextField(labelWithString: "Provides the encryption key required by 3rd Gen Walkmans (e.g. NW-E40x).")
-        dvidNote.font = NSFont.systemFont(ofSize: 10)
-        dvidNote.textColor = .secondaryLabelColor
-        dvidNote.frame = NSMakeRect(140, 120, 340, 15)
-        contentView.addSubview(dvidNote)
+        // Auto-detect connected Walkman at /Volumes/WALKMAN
+        let defaultWalkman = URL(fileURLWithPath: "/Volumes/WALKMAN")
+        if FileManager.default.fileExists(atPath: defaultWalkman.path) {
+            walkmanUrl = defaultWalkman
+            walkmanPathLabel.stringValue = "/Volumes/WALKMAN (Connected)"
+            walkmanPathLabel.textColor = .systemGreen
+        }
         
         // --- Status ---
         statusLabel = NSTextField(labelWithString: "Ready")
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
-        statusLabel.frame = NSMakeRect(20, 70, 460, 20)
+        statusLabel.frame = NSMakeRect(20, 80, 460, 20)
         contentView.addSubview(statusLabel)
         
         // --- Sync Button ---
         syncButton = NSButton(title: "Sync to Walkman", target: self, action: #selector(startSync))
-        syncButton.frame = NSMakeRect(150, 20, 200, 40)
+        syncButton.frame = NSMakeRect(150, 25, 200, 40)
         syncButton.bezelStyle = .rounded
-        syncButton.isEnabled = false
+        syncButton.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
         contentView.addSubview(syncButton)
         
         window.contentView = contentView
@@ -121,17 +113,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    @objc func selectDvID() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        if panel.runModal() == .OK {
-            dvidUrl = panel.url
-            dvidPathLabel.stringValue = dvidUrl?.path ?? ""
-            dvidPathLabel.textColor = .labelColor
-        }
-    }
-    
     func updateSyncButton() {
         syncButton.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
     }
@@ -151,24 +132,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self.statusLabel.stringValue = "Transferring \(titles.count) files..."
                 }
                 
-                // 2. Install DvID.DAT if provided
-                if let dvid = self.dvidUrl {
-                    try SyncEngine.installDVID(sourceDVID: dvid, destination: destination)
+                // 2. Transfer files with automated DvID key resolution & XOR scramble
+                try SyncEngine.transferFilesToWalkman(titles: titles, destination: destination) { msg in
+                    DispatchQueue.main.async {
+                        self.statusLabel.stringValue = msg
+                    }
                 }
-                
-                // 3. Copy MP3s to OMGAUDIO
-                try SyncEngine.copyFilesToWalkman(titles: titles, destination: destination)
                 
                 DispatchQueue.main.async {
                     self.statusLabel.stringValue = "Building Walkman Database..."
                 }
                 
-                // 4. Generate the DB files
-                let generator = WalkmanDBGenerator(dvidFile: self.dvidUrl)
+                // 3. Generate the DB files with 3rd Gen encryption flags
+                let generator = WalkmanDBGenerator(isEncrypted3rdGen: true)
                 try generator.generateDatabase(titles: titles, destination: destination)
                 
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Sync Complete!"
+                    self.statusLabel.stringValue = "Sync Complete (\(titles.count) tracks synced)!"
                     self.syncButton.isEnabled = true
                 }
                 

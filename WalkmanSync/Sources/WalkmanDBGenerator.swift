@@ -1,30 +1,37 @@
 import Foundation
 
 // MARK: - Core DB Generation Structures
-// These reflect the exact byte structures from DataBaseOmgaudioToolBox.java
+// Reflects Sony OMGAUDIO DAT database layout and JSymphonic's DataBaseOmgaudioToolBox.java
 
 public class WalkmanDBGenerator {
-    private var isEncrypted3rdGen: Bool = false
+    private var isEncrypted3rdGen: Bool = true
     
-    public init(dvidFile: URL?) {
-        if dvidFile != nil {
-            self.isEncrypted3rdGen = true
+    public init(isEncrypted3rdGen: Bool = true) {
+        self.isEncrypted3rdGen = isEncrypted3rdGen
+    }
+    
+    // Extracted metadata structures for database layout
+    public struct WalkmanTitle {
+        public var id: Int
+        public var titleName: String
+        public var artistName: String
+        public var albumName: String
+        public var genre: String
+        public var length: Int
+        public var originalFile: URL?
+        
+        public init(id: Int, titleName: String, artistName: String, albumName: String, genre: String, length: Int, originalFile: URL? = nil) {
+            self.id = id
+            self.titleName = titleName
+            self.artistName = artistName
+            self.albumName = albumName
+            self.genre = genre
+            self.length = length
+            self.originalFile = originalFile
         }
     }
     
-    // Extracted byte structures for database layout
-    public struct WalkmanTitle {
-        var id: Int
-        var titleName: String
-        var artistName: String
-        var albumName: String
-        var genre: String
-        var length: Int
-        var originalFile: URL? // Added for file transfer tracking
-    }
-    
     public func generateDatabase(titles: [WalkmanTitle], destination: URL) throws {
-        // Prepare OMGAUDIO structure
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
         try FileManager.default.createDirectory(at: omgAudioDir, withIntermediateDirectories: true, attributes: nil)
         
@@ -54,11 +61,13 @@ public class WalkmanDBGenerator {
         data.append(contentsOf: writeClassDescription(magic: "CNFB", something: 0x20, size: tableSize))
         data.append(contentsOf: writeClassHeader(magic: "CNFB", maxId: maxValue, size: elementSize))
         
-        for id in 1...maxValue {
-            if let title = titles.first(where: { $0.id == id }) {
-                data.append(contentsOf: writeCNFBelement(title: title, gotKey: isEncrypted3rdGen))
-            } else {
-                data.append(contentsOf: writeCNFBelement(title: nil, gotKey: isEncrypted3rdGen))
+        if maxValue > 0 {
+            for id in 1...maxValue {
+                if let title = titles.first(where: { $0.id == id }) {
+                    data.append(contentsOf: writeCNFBelement(title: title, gotKey: isEncrypted3rdGen))
+                } else {
+                    data.append(contentsOf: writeCNFBelement(title: nil, gotKey: isEncrypted3rdGen))
+                }
             }
         }
         
@@ -97,8 +106,8 @@ public class WalkmanDBGenerator {
     private func writeCNFBelement(title: WalkmanTitle?, gotKey: Bool) -> Data {
         var d = Data()
         
-        let constant1: [UInt8] = [0x00, 0x05, 0x00, 0x80] // -128 in signed byte is 0x80
-        let constant2: [UInt8] = [0x00, 0x02]
+        let constant1: [UInt8] = [0x00, 0x05, 0x00, 0x80] // 5 tags of 128 (0x80) bytes
+        let constant2: [UInt8] = [0x00, 0x02] // UTF-16BE encoding
         
         if let t = title {
             // Write element header
@@ -113,9 +122,9 @@ public class WalkmanDBGenerator {
                 d.append(contentsOf: [0xFF, 0xFF])
             }
             
-            // File properties stub (4 bytes)
-            d.append(contentsOf: [0x00, 0x00, 0x00, 0x00])
-            d.append(int2bytes(t.length, length: 4)) // title key
+            // File properties: 0x80 (CBR), 0xD9 (MPEG1 Layer III 128kbps), 0x10 (Stereo), 0x00
+            d.append(contentsOf: [0x80, 0xD9, 0x10, 0x00])
+            d.append(int2bytes(t.length * 1000, length: 4)) // title key in milliseconds
             
             d.append(contentsOf: constant1)
             
