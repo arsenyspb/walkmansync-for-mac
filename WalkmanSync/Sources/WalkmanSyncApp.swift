@@ -98,11 +98,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         walkmanPathLabel.textColor = .systemOrange
         contentView.addSubview(walkmanPathLabel)
         
+        // --- Status & Logs ---
+        statusLabel = NSTextField(labelWithString: "Ready")
+        statusLabel.alignment = .center
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.frame = NSMakeRect(20, 85, 480, 20)
+        contentView.addSubview(statusLabel)
+        
+        let logButton = NSButton(title: "View Logs", target: self, action: #selector(openLogs))
+        logButton.bezelStyle = .inline
+        logButton.font = NSFont.systemFont(ofSize: 10)
+        logButton.frame = NSMakeRect(420, 25, 80, 24)
+        contentView.addSubview(logButton)
+        
         // --- Sync Button ---
         syncButton = NSButton(title: "Sync to Walkman", target: self, action: #selector(startSync))
         syncButton.frame = NSMakeRect(160, 25, 200, 42)
         syncButton.bezelStyle = .rounded
-        syncButton.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
+        syncButton.isEnabled = false
         contentView.addSubview(syncButton)
         
         window.contentView = contentView
@@ -163,16 +176,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if walkmanUrl != vol {
                 walkmanUrl = vol
                 WalkmanLogger.info("Walkman device detected at: \(vol.path)")
-                walkmanPathLabel.stringValue = "● Connected (\(vol.lastPathComponent))"
-                walkmanPathLabel.textColor = .systemGreen
+                walkmanPathLabel?.stringValue = "● Connected (\(vol.lastPathComponent))"
+                walkmanPathLabel?.textColor = .systemGreen
                 updateSyncButton()
             }
         } else {
             if walkmanUrl != nil {
                 walkmanUrl = nil
                 WalkmanLogger.warn("Walkman device disconnected")
-                walkmanPathLabel.stringValue = "Waiting for device to connect via USB..."
-                walkmanPathLabel.textColor = .systemOrange
+                walkmanPathLabel?.stringValue = "Waiting for device to connect via USB..."
+                walkmanPathLabel?.textColor = .systemOrange
                 updateSyncButton()
             }
         }
@@ -190,13 +203,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 let tracks = SyncEngine.scanForMusic(in: url)
                 let count = tracks.count
                 if count > 0 {
-                    sourcePathLabel.stringValue = "\(url.lastPathComponent) (\(count) track\(count == 1 ? "" : "s"))"
-                    sourcePathLabel.textColor = .labelColor
-                    statusLabel.stringValue = "Found \(count) audio track\(count == 1 ? "" : "s") ready to sync."
+                    sourcePathLabel?.stringValue = "\(url.lastPathComponent) (\(count) track\(count == 1 ? "" : "s"))"
+                    sourcePathLabel?.textColor = .labelColor
+                    statusLabel?.stringValue = "Found \(count) audio track\(count == 1 ? "" : "s") ready to sync."
                 } else {
-                    sourcePathLabel.stringValue = "\(url.lastPathComponent) (0 tracks found)"
-                    sourcePathLabel.textColor = .systemRed
-                    statusLabel.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
+                    sourcePathLabel?.stringValue = "\(url.lastPathComponent) (0 tracks found)"
+                    sourcePathLabel?.textColor = .systemRed
+                    statusLabel?.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
                 }
             }
             updateSyncButton()
@@ -204,7 +217,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func updateSyncButton() {
-        syncButton?.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
+        if let btn = syncButton {
+            btn.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
+        }
     }
     
     @objc func openLogs() {
@@ -215,8 +230,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let source = sourceUrl, let destination = walkmanUrl else { return }
         
         WalkmanLogger.info("Sync started from source: \(source.path) to Walkman: \(destination.path)")
-        syncButton.isEnabled = false
-        statusLabel.stringValue = "Scanning files..."
+        syncButton?.isEnabled = false
+        statusLabel?.stringValue = "Scanning files..."
         
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -225,8 +240,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard !titles.isEmpty else {
                     WalkmanLogger.warn("No audio files found in: \(source.path)")
                     DispatchQueue.main.async {
-                        self.statusLabel.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
-                        self.syncButton.isEnabled = true
+                        self.statusLabel?.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
+                        self.syncButton?.isEnabled = true
                     }
                     return
                 }
@@ -234,18 +249,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 WalkmanLogger.info("Scanned \(titles.count) tracks from source")
                 
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Starting sync for \(titles.count) tracks..."
+                    self.statusLabel?.stringValue = "Starting sync for \(titles.count) tracks..."
                 }
                 
                 // 2. Transfer files with automated DvID key resolution & XOR scramble
                 try SyncEngine.transferFilesToWalkman(titles: titles, destination: destination) { msg in
                     DispatchQueue.main.async {
-                        self.statusLabel.stringValue = msg
+                        self.statusLabel?.stringValue = msg
                     }
                 }
                 
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Building hardware-accurate Walkman database..."
+                    self.statusLabel?.stringValue = "Building hardware-accurate Walkman database..."
                 }
                 
                 // 3. Generate all 8 OMGAUDIO database files
@@ -254,15 +269,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 
                 WalkmanLogger.info("Sync completed successfully for \(titles.count) tracks!")
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Sync Complete (\(titles.count) tracks synced)!"
-                    self.syncButton.isEnabled = true
+                    self.statusLabel?.stringValue = "Sync Complete (\(titles.count) tracks synced)!"
+                    self.syncButton?.isEnabled = true
                 }
                 
             } catch {
                 WalkmanLogger.error("Sync error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
-                    self.statusLabel.stringValue = "Error: \(error.localizedDescription)"
-                    self.syncButton.isEnabled = true
+                    self.statusLabel?.stringValue = "Error: \(error.localizedDescription)"
+                    self.syncButton?.isEnabled = true
                 }
             }
         }
