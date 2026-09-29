@@ -56,6 +56,39 @@ Historically, managing music on 3rd-generation Sony Walkmans required running de
 
 ---
 
+## Dependencies & Audio Encoders
+
+WalkmanSync is designed to be as self-contained as possible:
+
+| Feature / Workflow | Required Tools | Bundled / Installation |
+|---|---|---|
+| **Direct MP3 Sync (Standard `.mp3` files)** | None | **100% Zero Dependencies** (Built-in pure Swift) |
+| **ATRAC3 / ATRAC3plus Encoding** | `atracdenc` + `ffmpeg` | `atracdenc` is **Pre-Bundled** inside the App; `ffmpeg` via Homebrew |
+| **Non-MP3 Ingest (FLAC, M4A, WAV, AIFF, OGG)** | `ffmpeg` | `brew install ffmpeg` |
+| **Hardware Key Extraction & OMGAUDIO DB** | None | **Pure Native macOS (IOKit & Swift)** |
+
+### Optional: Installing FFmpeg
+If you plan to use Sony's native hardware **ATRAC3** encoder or transfer lossless **FLAC / M4A** files:
+```bash
+brew install ffmpeg
+```
+*(Tip: If your library is already in standard `.mp3` format and you select the **MP3 (320 kbps CBR)** option, no external tools are required!)*
+
+### System Health & Dependency Doctor
+Audit your machine's audio engine, encoders, and connected player anytime:
+
+- **From the GUI**: Click the **"🩺 Doctor..."** button at the bottom of the window.
+- **From the CLI**:
+  ```bash
+  walkmansync --doctor
+  ```
+  Or for machine-readable JSON:
+  ```bash
+  walkmansync --doctor --json
+  ```
+
+---
+
 ## Supported Devices & Hardware Series
 
 | Series | Models | Generation | Database Format |

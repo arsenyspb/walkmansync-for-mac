@@ -26,6 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var codecPopUp: NSPopUpButton!
     var syncButton: NSButton!
     var statusLabel: NSTextField!
+    var dependencyLabel: NSTextField!
     
     var sourceUrl: URL?
     var walkmanUrl: URL?
@@ -142,22 +143,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         codecPopUp.action = #selector(codecChanged)
         contentView.addSubview(codecPopUp)
         
+        // --- Dependency / Engine Status ---
+        dependencyLabel = NSTextField(labelWithString: "")
+        dependencyLabel.font = NSFont.systemFont(ofSize: 11)
+        dependencyLabel.frame = NSMakeRect(140, 106, 380, 18)
+        contentView.addSubview(dependencyLabel)
+        
         // --- Status & Logs ---
         statusLabel = NSTextField(labelWithString: "Ready")
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
-        statusLabel.frame = NSMakeRect(20, 80, 480, 20)
+        statusLabel.frame = NSMakeRect(20, 75, 500, 20)
         contentView.addSubview(statusLabel)
         
+        // --- Doctor Button ---
+        let doctorBtn = NSButton(title: "🩺 Doctor...", target: self, action: #selector(showDoctorDialog))
+        doctorBtn.bezelStyle = .inline
+        doctorBtn.font = NSFont.systemFont(ofSize: 11)
+        doctorBtn.frame = NSMakeRect(305, 23, 100, 26)
+        contentView.addSubview(doctorBtn)
+        
+        // --- View Logs Button ---
         let logButton = NSButton(title: "View Logs", target: self, action: #selector(openLogs))
         logButton.bezelStyle = .inline
-        logButton.font = NSFont.systemFont(ofSize: 10)
-        logButton.frame = NSMakeRect(420, 22, 80, 24)
+        logButton.font = NSFont.systemFont(ofSize: 11)
+        logButton.frame = NSMakeRect(415, 23, 88, 26)
         contentView.addSubview(logButton)
         
         // --- Sync Button ---
         syncButton = NSButton(title: "Sync to Walkman", target: self, action: #selector(startSync))
-        syncButton.frame = NSMakeRect(160, 20, 200, 42)
+        syncButton.frame = NSMakeRect(110, 18, 180, 38)
         syncButton.bezelStyle = .rounded
         syncButton.isEnabled = false
         contentView.addSubview(syncButton)
@@ -165,6 +180,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = contentView
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        
+        updateDependencyStatus()
         
         // Start continuous live device monitoring after UI is ready
         startDeviceMonitoring()
@@ -224,6 +241,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc func codecChanged() {
         updateStorageDisplay()
+        updateDependencyStatus()
     }
     
     private func updateStorageDisplay() {
@@ -314,6 +332,101 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func updateSyncButton() {
         if let btn = syncButton {
             btn.isEnabled = (sourceUrl != nil && walkmanUrl != nil)
+        }
+    }
+    
+    private func updateDependencyStatus() {
+        let hasFFmpeg = SyncEngine.findFFmpeg() != nil
+        let hasAtracdenc = SyncEngine.findAtracdenc() != nil
+        let selectedIndex = codecPopUp?.indexOfSelectedItem ?? 0
+        let isMP3 = selectedIndex == 3
+        
+        if isMP3 {
+            if hasFFmpeg {
+                dependencyLabel?.stringValue = "✓ Pure MP3 Mode (FFmpeg available for non-MP3 files)"
+                dependencyLabel?.textColor = .secondaryLabelColor
+            } else {
+                dependencyLabel?.stringValue = "✓ Pure MP3 Mode (Zero external tools required for .mp3)"
+                dependencyLabel?.textColor = .systemGreen
+            }
+        } else {
+            if hasFFmpeg && hasAtracdenc {
+                dependencyLabel?.stringValue = "● Audio Engine: Ready (FFmpeg & ATRAC3 active)"
+                dependencyLabel?.textColor = .systemGreen
+            } else if !hasFFmpeg {
+                dependencyLabel?.stringValue = "⚠️ FFmpeg missing for ATRAC3 (Click Doctor for setup)"
+                dependencyLabel?.textColor = .systemOrange
+            } else {
+                dependencyLabel?.stringValue = "⚠️ atracdenc encoder missing (Click Doctor for setup)"
+                dependencyLabel?.textColor = .systemRed
+            }
+        }
+    }
+    
+    @objc func showDoctorDialog() {
+        let ffmpeg = SyncEngine.findFFmpeg()
+        let atracdenc = SyncEngine.findAtracdenc()
+        let walkman = walkmanUrl ?? SyncEngine.findWalkmanVolume()
+        let key = walkman != nil ? WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: walkman!) : nil
+        
+        let alert = NSAlert()
+        alert.messageText = "WalkmanSync System Health & Dependencies"
+        
+        var message = ""
+        
+        // FFmpeg
+        if let ff = ffmpeg {
+            message += "✓ FFmpeg: Installed (\(ff))\n"
+            message += "   Ready for: ATRAC3 encoding & FLAC/M4A/WAV decoding\n\n"
+        } else {
+            message += "✗ FFmpeg: Not Installed\n"
+            message += "   Required for: ATRAC3 encoding & FLAC/M4A/WAV files\n"
+            message += "   Install via Homebrew: brew install ffmpeg\n"
+            message += "   (Note: Standard .mp3 files sync without FFmpeg!)\n\n"
+        }
+        
+        // atracdenc
+        if let at = atracdenc {
+            let note = at.contains(".app/") ? " (Bundled with App)" : ""
+            message += "✓ atracdenc: Available\(note)\n"
+            message += "   Ready for: Sony ATRAC3 / ATRAC3plus encoding\n\n"
+        } else {
+            message += "✗ atracdenc: Missing\n"
+            message += "   Required for: Sony ATRAC3 / ATRAC3plus encoding\n\n"
+        }
+        
+        // Walkman
+        if let vol = walkman {
+            let attrs = try? FileManager.default.attributesOfFileSystem(forPath: vol.path)
+            let freeMB = (attrs?[.systemFreeSize] as? Int64 ?? 0) / (1024 * 1024)
+            let totalMB = (attrs?[.systemSize] as? Int64 ?? 0) / (1024 * 1024)
+            message += "✓ Walkman USB: Connected (\(vol.lastPathComponent))\n"
+            message += "   Storage: \(freeMB) MB free of \(totalMB) MB\n"
+            if let k = key {
+                message += "   Hardware Key: 0x\(String(format: "%08X", k)) (Verified)\n"
+            }
+        } else {
+            message += "• Walkman USB: Not Connected\n"
+            message += "   Connect your Walkman via USB to transfer music\n"
+        }
+        
+        alert.informativeText = message
+        alert.alertStyle = ffmpeg != nil ? .informational : .warning
+        
+        alert.addButton(withTitle: "OK")
+        if ffmpeg == nil {
+            alert.addButton(withTitle: "Copy 'brew install ffmpeg'")
+        }
+        alert.addButton(withTitle: "📖 View Online Guide")
+        
+        let response = alert.runModal()
+        if ffmpeg == nil && response == .alertSecondButtonReturn {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString("brew install ffmpeg", forType: .string)
+        } else if (ffmpeg == nil && response == .alertThirdButtonReturn) || (ffmpeg != nil && response == .alertSecondButtonReturn) {
+            if let url = URL(string: "https://github.com/arsenyspb/walkmansync-for-mac#dependencies--audio-encoders") {
+                NSWorkspace.shared.open(url)
+            }
         }
     }
     
