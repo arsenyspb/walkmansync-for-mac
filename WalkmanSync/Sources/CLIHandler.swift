@@ -25,6 +25,7 @@ public class CLIHandler {
             case help
             case version
             case detect
+            case doctor
             case scan
             case sync
             case clean
@@ -38,6 +39,8 @@ public class CLIHandler {
                 action = .help
             case "--version", "-v":
                 action = .version
+            case "--doctor", "-D":
+                action = .doctor
             case "--detect", "-d":
                 action = .detect
             case "--scan":
@@ -67,6 +70,7 @@ public class CLIHandler {
                 }
             case "--json":
                 isJSON = true
+                WalkmanLogger.silenceStdout = true
             case "--dry-run":
                 isDryRun = true
             case "--verbose":
@@ -110,6 +114,9 @@ public class CLIHandler {
             
         case .detect:
             handleDetect(explicitPath: walkmanPath, isJSON: isJSON)
+            
+        case .doctor:
+            handleDoctor(explicitPath: walkmanPath, isJSON: isJSON)
             
         case .scan:
             guard let folder = scanPath ?? sourcePath else {
@@ -230,6 +237,121 @@ public class CLIHandler {
         exit(detectedDevices.isEmpty ? 1 : 0)
     }
     
+    private static func handleDoctor(explicitPath: String?, isJSON: Bool) {
+        let ffmpeg = SyncEngine.findFFmpeg()
+        let atracdenc = SyncEngine.findAtracdenc()
+        let dotCleanPath: String? = {
+            if FileManager.default.isExecutableFile(atPath: "/usr/sbin/dot_clean") { return "/usr/sbin/dot_clean" }
+            if FileManager.default.isExecutableFile(atPath: "/usr/bin/dot_clean") { return "/usr/bin/dot_clean" }
+            return nil
+        }()
+        let destinationURL: URL?
+        if let path = explicitPath {
+            destinationURL = URL(fileURLWithPath: path)
+        } else {
+            destinationURL = SyncEngine.findWalkmanVolume()
+        }
+        
+        let appSupportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!.appendingPathComponent("WalkmanSync/DvID.DAT")
+        let hasCachedKey = FileManager.default.fileExists(atPath: appSupportDir.path)
+        let resolvedKey: UInt32? = destinationURL != nil ? WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destinationURL!) : (hasCachedKey ? WalkmanKeyManager.readDeviceKey(from: appSupportDir) : nil)
+        
+        if isJSON {
+            let jsonDict: [String: Any] = [
+                "ffmpeg": [
+                    "available": ffmpeg != nil,
+                    "path": ffmpeg ?? "",
+                    "requiredFor": "FLAC/M4A/WAV decoding and ATRAC3 encoding"
+                ],
+                "atracdenc": [
+                    "available": atracdenc != nil,
+                    "path": atracdenc ?? "",
+                    "bundled": atracdenc?.contains(".app/") ?? false
+                ],
+                "dot_clean": [
+                    "available": dotCleanPath != nil,
+                    "path": dotCleanPath ?? ""
+                ],
+                "walkman": [
+                    "connected": destinationURL != nil,
+                    "mountPath": destinationURL?.path ?? "",
+                    "hardwareKey": resolvedKey != nil ? String(format: "0x%08X", resolvedKey!) : ""
+                ],
+                "cachedKey": [
+                    "available": hasCachedKey,
+                    "path": appSupportDir.path
+                ],
+                "mp3DirectSyncReady": true,
+                "atrac3SyncReady": ffmpeg != nil && atracdenc != nil
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.prettyPrinted]),
+               let str = String(data: data, encoding: .utf8) {
+                print(str)
+            }
+            exit(0)
+        }
+        
+        print("==================================================")
+        print("WalkmanSync Health & Dependency Check")
+        print("==================================================")
+        print("")
+        print("External Tools & Audio Encoders:")
+        if let ff = ffmpeg {
+            print("  [✓] FFmpeg:       \(ff)")
+            print("                    (Used for: FLAC/M4A/WAV decoding & ATRAC PCM preparation)")
+        } else {
+            print("  [✗] FFmpeg:       NOT FOUND")
+            print("                    -> Required for: ATRAC3 encoding & non-MP3 files (FLAC, M4A, WAV)")
+            print("                    -> To install:   brew install ffmpeg")
+            print("                    -> Note: Pure MP3 files can still be synced directly with '--codec mp3'!")
+        }
+        
+        if let at = atracdenc {
+            let bundledNote = at.contains(".app/") ? " (Bundled with App)" : ""
+            print("  [✓] atracdenc:    \(at)\(bundledNote)")
+            print("                    (Used for: Sony ATRAC3 / ATRAC3plus hardware encoding)")
+        } else {
+            print("  [✗] atracdenc:    NOT FOUND")
+            print("                    -> Required for: Sony ATRAC3 / ATRAC3plus hardware encoding")
+        }
+        
+        if let dc = dotCleanPath {
+            print("  [✓] dot_clean:    \(dc) (Built-in macOS system utility)")
+        } else {
+            print("  [!] dot_clean:    NOT FOUND")
+        }
+        
+        print("")
+        print("Connected Hardware & Encryption Keys:")
+        if let vol = destinationURL {
+            let attrs = try? FileManager.default.attributesOfFileSystem(forPath: vol.path)
+            let freeMB = (attrs?[.systemFreeSize] as? Int64 ?? 0) / (1024 * 1024)
+            let totalMB = (attrs?[.systemSize] as? Int64 ?? 0) / (1024 * 1024)
+            print("  [✓] Walkman USB:  Connected at \(vol.path) (\(freeMB) MB free of \(totalMB) MB)")
+            if let key = resolvedKey {
+                print("  [✓] Hardware Key: 0x\(String(format: "%08X", key)) (Verified & Ready)")
+            } else {
+                print("  [!] Hardware Key: Not yet resolved on device")
+            }
+        } else {
+            print("  [-] Walkman USB:  Not connected (Connect Walkman via USB to sync)")
+            if hasCachedKey, let key = resolvedKey {
+                print("  [✓] Hardware Key: 0x\(String(format: "%08X", key)) (Cached in Application Support)")
+            }
+        }
+        
+        print("")
+        print("Readiness Summary:")
+        print("  • Pure MP3 Sync:          [READY] (Zero external dependencies required)")
+        if ffmpeg != nil && atracdenc != nil {
+            print("  • ATRAC3 / FLAC / M4A:    [READY] (All encoders and decoders present)")
+        } else {
+            print("  • ATRAC3 / FLAC / M4A:    [NEEDS FFMPEG] (Run: brew install ffmpeg)")
+        }
+        print("==================================================")
+        exit(0)
+    }
+    
     private static func handleScan(folderPath: String, isJSON: Bool) {
         let folderURL = URL(fileURLWithPath: folderPath)
         guard FileManager.default.fileExists(atPath: folderURL.path) else {
@@ -315,6 +437,18 @@ public class CLIHandler {
             exit(0)
         }
         
+        // Preflight dependency check
+        let hasNonMP3 = titles.contains { ($0.originalFile?.pathExtension.lowercased() ?? "") != "mp3" }
+        let requiresFFmpeg = codec != .mp3 || hasNonMP3
+        if requiresFFmpeg && SyncEngine.findFFmpeg() == nil {
+            printError("FFmpeg is required to prepare audio for \(codec.displayName)\(hasNonMP3 ? " (non-MP3 files detected)" : "").\n       Please install via 'brew install ffmpeg', or use pure .mp3 files with '--codec mp3'.")
+            exit(1)
+        }
+        if codec != .mp3 && SyncEngine.findAtracdenc() == nil {
+            printError("atracdenc encoder binary not found.\n       Please ensure atracdenc is bundled with WalkmanSync or installed at /opt/homebrew/bin/atracdenc.")
+            exit(1)
+        }
+        
         do {
             if !isJSON {
                 print("[+] Encoding and transferring audio tracks (\(codec.displayName))...")
@@ -384,6 +518,7 @@ public class CLIHandler {
         
         ACTIONS:
             --detect, -d                  Detect and inspect connected Walkman devices
+            --doctor, -D                  Check system health, dependencies (FFmpeg, ATRAC), and keys
             --scan <folder>               Scan music folder and list tracks, formats, metadata
             --sync --source <folder>      Sync local music folder to Walkman
             --clean                       Clean macOS AppleDouble (._*) files on Walkman

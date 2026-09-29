@@ -36,7 +36,7 @@ public enum WalkmanKeyManager {
             let fileURL = deviceURL.appendingPathComponent(relativePath)
             if fm.fileExists(atPath: fileURL.path) {
                 if let key = readDeviceKey(from: fileURL) {
-                    print("Found existing DvID key at \(relativePath): 0x\(String(format: "%08X", key))")
+                    WalkmanLogger.info("Found existing DvID key at \(relativePath): 0x\(String(format: "%08X", key))")
                     // Backup key to Application Support for future recovery
                     if let rawData = try? Data(contentsOf: fileURL) {
                         try? rawData.write(to: appSupportBackupURL)
@@ -54,7 +54,7 @@ public enum WalkmanKeyManager {
             try? fm.createDirectory(at: mp3fmDir, withIntermediateDirectories: true, attributes: nil)
             let dvidURL = mp3fmDir.appendingPathComponent("DvID.DAT")
             try? rawData.write(to: dvidURL)
-            print("Restored authentic hardware DvID.DAT from Application Support backup: 0x\(String(format: "%08X", key))")
+            WalkmanLogger.info("Restored authentic hardware DvID.DAT from Application Support backup: 0x\(String(format: "%08X", key))")
             return key
         }
         
@@ -65,7 +65,7 @@ public enum WalkmanKeyManager {
         
         let dvidData = generateDvidData(key: defaultDeviceKey)
         try? dvidData.write(to: dvidURL)
-        print("Generated standard 16-byte DvID.DAT at MP3FM/DvID.DAT with key 0x\(String(format: "%08X", defaultDeviceKey))")
+        WalkmanLogger.info("Generated standard 16-byte DvID.DAT at MP3FM/DvID.DAT with key 0x\(String(format: "%08X", defaultDeviceKey))")
         return defaultDeviceKey
     }
     

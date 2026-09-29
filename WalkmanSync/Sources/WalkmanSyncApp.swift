@@ -353,6 +353,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 
                 WalkmanLogger.info("Scanned \(titles.count) tracks from source")
                 
+                // Preflight dependency validation
+                let hasNonMP3 = titles.contains { ($0.originalFile?.pathExtension.lowercased() ?? "") != "mp3" }
+                let requiresFFmpeg = selectedCodec != .mp3 || hasNonMP3
+                
+                if requiresFFmpeg && SyncEngine.findFFmpeg() == nil {
+                    DispatchQueue.main.async {
+                        self.syncButton?.isEnabled = true
+                        self.statusLabel?.stringValue = "FFmpeg required. Run 'brew install ffmpeg' in Terminal."
+                        
+                        let alert = NSAlert()
+                        alert.messageText = "FFmpeg Required for This Operation"
+                        alert.informativeText = "ATRAC3 encoding and non-MP3 files (FLAC, M4A, WAV, etc.) require FFmpeg on your Mac.\n\nTo install FFmpeg, open Terminal and run:\n\n    brew install ffmpeg\n\nTip: You can sync standard .mp3 files directly using 'MP3 (320 kbps CBR)' with zero dependencies."
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.addButton(withTitle: "Copy 'brew install ffmpeg'")
+                        let response = alert.runModal()
+                        if response == .alertSecondButtonReturn {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString("brew install ffmpeg", forType: .string)
+                        }
+                    }
+                    return
+                }
+                
+                if selectedCodec != .mp3 && SyncEngine.findAtracdenc() == nil {
+                    DispatchQueue.main.async {
+                        self.syncButton?.isEnabled = true
+                        self.statusLabel?.stringValue = "atracdenc binary missing."
+                        
+                        let alert = NSAlert()
+                        alert.messageText = "atracdenc Encoder Missing"
+                        alert.informativeText = "The ATRAC encoder binary (atracdenc) was not found in the application bundle or system PATH.\n\nPlease reinstall WalkmanSync or place atracdenc at /opt/homebrew/bin/atracdenc."
+                        alert.alertStyle = .critical
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
+                    return
+                }
+                
                 DispatchQueue.main.async {
                     self.statusLabel?.stringValue = "Starting sync for \(titles.count) tracks (\(selectedCodec.displayName))..."
                 }

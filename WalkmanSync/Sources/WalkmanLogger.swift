@@ -9,6 +9,8 @@ public class WalkmanLogger {
     private let logQueue = DispatchQueue(label: "com.arsenyspb.walkmansync.logger")
     private var fileHandle: FileHandle?
     
+    public static var silenceStdout: Bool = false
+    
     private init() {
         let libraryLogs = fileManager.urls(for: .libraryDirectory, in: .userDomainMask).first!
             .appendingPathComponent("Logs", isDirectory: true)
@@ -35,7 +37,9 @@ public class WalkmanLogger {
     public func log(_ message: String, level: String = "INFO") {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let line = "[\(timestamp)] [\(level)] \(message)\n"
-        print(line, terminator: "")
+        if !WalkmanLogger.silenceStdout {
+            print(line, terminator: "")
+        }
         
         logQueue.async { [weak self] in
             guard let self = self, let handle = self.fileHandle else { return }
