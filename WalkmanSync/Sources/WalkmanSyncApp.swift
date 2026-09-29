@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     var sourceUrl: URL?
     var walkmanUrl: URL?
+    var deviceDetectionTimer: Timer?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupMainMenu()
@@ -85,23 +86,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sourceBtn.frame = NSMakeRect(410, 180, 90, 30)
         contentView.addSubview(sourceBtn)
         
-        // --- Walkman Folder ---
-        let walkmanTitle = NSTextField(labelWithString: "Walkman Volume:")
+        // --- Walkman Connection Status ---
+        let walkmanTitle = NSTextField(labelWithString: "Walkman Device:")
         walkmanTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        walkmanTitle.frame = NSMakeRect(20, 140, 115, 20)
+        walkmanTitle.frame = NSMakeRect(20, 140, 125, 20)
         contentView.addSubview(walkmanTitle)
         
-        walkmanPathLabel = NSTextField(labelWithString: "Not Selected")
-        walkmanPathLabel.frame = NSMakeRect(140, 140, 260, 20)
-        walkmanPathLabel.textColor = .secondaryLabelColor
+        walkmanPathLabel = NSTextField(labelWithString: "Searching for Walkman via USB...")
+        walkmanPathLabel.font = NSFont.systemFont(ofSize: 13)
+        walkmanPathLabel.frame = NSMakeRect(145, 140, 355, 20)
+        walkmanPathLabel.textColor = .systemOrange
         contentView.addSubview(walkmanPathLabel)
         
-        let walkmanBtn = NSButton(title: "Browse...", target: self, action: #selector(selectWalkman))
-        walkmanBtn.frame = NSMakeRect(410, 135, 90, 30)
-        contentView.addSubview(walkmanBtn)
-        
-        // Auto-detect connected Walkman across /Volumes
-        autoDetectWalkman()
+        // Start continuous live device monitoring
+        startDeviceMonitoring()
         
         // --- Status & Logs ---
         statusLabel = NSTextField(labelWithString: "Ready")
@@ -128,28 +126,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
     
-    private func autoDetectWalkman() {
+    private func startDeviceMonitoring() {
+        checkConnectedWalkman()
+        
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(volumeChanged),
+            name: NSWorkspace.didMountNotification,
+            object: nil
+        )
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(volumeChanged),
+            name: NSWorkspace.didUnmountNotification,
+            object: nil
+        )
+        
+        deviceDetectionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.checkConnectedWalkman()
+        }
+    }
+    
+    @objc func volumeChanged(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            self?.checkConnectedWalkman()
+        }
+    }
+    
+    private func checkConnectedWalkman() {
         let fm = FileManager.default
         let volumesURL = URL(fileURLWithPath: "/Volumes")
+        var detected: URL?
+        
         if let volumes = try? fm.contentsOfDirectory(at: volumesURL, includingPropertiesForKeys: nil) {
             for vol in volumes {
                 let name = vol.lastPathComponent.uppercased()
                 let hasOmgAudio = fm.fileExists(atPath: vol.appendingPathComponent("OMGAUDIO").path)
-                if name == "WALKMAN" || hasOmgAudio {
-                    walkmanUrl = vol
-                    walkmanPathLabel.stringValue = "\(vol.path) (Connected)"
-                    walkmanPathLabel.textColor = .systemGreen
-                    return
+                let hasMp3fm = fm.fileExists(atPath: vol.appendingPathComponent("MP3FM").path)
+                let hasNwwm = fm.fileExists(atPath: vol.appendingPathComponent("NWWM").path)
+                
+                if name == "WALKMAN" || name == "SONY" || hasOmgAudio || hasMp3fm || hasNwwm {
+                    detected = vol
+                    break
                 }
             }
         }
         
-        // Fallback check
-        let defaultWalkman = URL(fileURLWithPath: "/Volumes/WALKMAN")
-        if fm.fileExists(atPath: defaultWalkman.path) {
-            walkmanUrl = defaultWalkman
-            walkmanPathLabel.stringValue = "/Volumes/WALKMAN (Connected)"
-            walkmanPathLabel.textColor = .systemGreen
+        if let vol = detected {
+            if walkmanUrl != vol {
+                walkmanUrl = vol
+                WalkmanLogger.info("Walkman device detected at: \(vol.path)")
+                walkmanPathLabel.stringValue = "● Connected (\(vol.lastPathComponent))"
+                walkmanPathLabel.textColor = .systemGreen
+                updateSyncButton()
+            }
+        } else {
+            if walkmanUrl != nil {
+                walkmanUrl = nil
+                WalkmanLogger.warn("Walkman device disconnected")
+                walkmanPathLabel.stringValue = "Waiting for device to connect via USB..."
+                walkmanPathLabel.textColor = .systemOrange
+                updateSyncButton()
+            }
         }
     }
     
@@ -175,25 +213,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             updateSyncButton()
-        }
-    }
-    
-    @objc func selectWalkman() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.directoryURL = URL(fileURLWithPath: "/Volumes")
-        panel.prompt = "Select Volume"
-        panel.message = "Select your mounted Walkman drive from /Volumes"
-        if panel.runModal() == .OK {
-            if let url = panel.url {
-                walkmanUrl = url
-                let hasOmgAudio = FileManager.default.fileExists(atPath: url.appendingPathComponent("OMGAUDIO").path)
-                let suffix = hasOmgAudio ? " (Walkman Detected)" : " (Selected)"
-                walkmanPathLabel.stringValue = "\(url.path)\(suffix)"
-                walkmanPathLabel.textColor = .systemGreen
-                updateSyncButton()
-            }
         }
     }
     
