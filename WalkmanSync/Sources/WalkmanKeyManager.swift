@@ -20,6 +20,14 @@ public enum WalkmanKeyManager {
         "DvID.dat"
     ]
     
+    /// App Support backup URL for the device key
+    private static var appSupportBackupURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = appSupport.appendingPathComponent("WalkmanSync", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
+        return dir.appendingPathComponent("DvID.DAT")
+    }
+
     /// Discovers existing device key or creates and saves a standard DvID.DAT file to MP3FM/DvID.DAT
     public static func resolveOrCreateDeviceKey(deviceURL: URL) -> UInt32 {
         let fm = FileManager.default
@@ -29,9 +37,25 @@ public enum WalkmanKeyManager {
             if fm.fileExists(atPath: fileURL.path) {
                 if let key = readDeviceKey(from: fileURL) {
                     print("Found existing DvID key at \(relativePath): 0x\(String(format: "%08X", key))")
+                    // Backup key to Application Support for future recovery
+                    if let rawData = try? Data(contentsOf: fileURL) {
+                        try? rawData.write(to: appSupportBackupURL)
+                    }
                     return key
                 }
             }
+        }
+        
+        // Check if we have a backed-up hardware key from previous extractions
+        if fm.fileExists(atPath: appSupportBackupURL.path),
+           let rawData = try? Data(contentsOf: appSupportBackupURL),
+           let key = readDeviceKey(from: appSupportBackupURL) {
+            let mp3fmDir = deviceURL.appendingPathComponent("MP3FM", isDirectory: true)
+            try? fm.createDirectory(at: mp3fmDir, withIntermediateDirectories: true, attributes: nil)
+            let dvidURL = mp3fmDir.appendingPathComponent("DvID.DAT")
+            try? rawData.write(to: dvidURL)
+            print("Restored authentic hardware DvID.DAT from Application Support backup: 0x\(String(format: "%08X", key))")
+            return key
         }
         
         // No key exists; create standard MP3FM/DvID.DAT
@@ -97,17 +121,24 @@ public enum WalkmanKeyManager {
         ]
     }
     
-    /// Scrambles audio data in-place using 8-byte repeating blocks
+    /// Scrambles audio data in-place using repeating 4-byte key (processed in 8-byte blocks + tail)
     public static func xorScramble(data: inout Data, keyBytes: [UInt8]) {
         let key8 = keyBytes + keyBytes
         let count = data.count
         let blockCount = count / 8
+        let remainder = count % 8
         
         data.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) in
             guard let baseAddress = ptr.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
             for b in 0..<blockCount {
                 let offset = b * 8
                 for j in 0..<8 {
+                    baseAddress[offset + j] ^= key8[j]
+                }
+            }
+            if remainder > 0 {
+                let offset = blockCount * 8
+                for j in 0..<remainder {
                     baseAddress[offset + j] ^= key8[j]
                 }
             }

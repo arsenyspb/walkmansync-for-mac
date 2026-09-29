@@ -1,7 +1,7 @@
 import Foundation
 
 public class CLIHandler {
-    public static let version = "0.2.0"
+    public static let version = "0.3.0"
     
     public static func shouldHandleCLI() -> Bool {
         let args = CommandLine.arguments.dropFirst().filter { !$0.starts(with: "-psn_") }
@@ -17,6 +17,7 @@ public class CLIHandler {
         var sourcePath: String?
         var walkmanPath: String?
         var scanPath: String?
+        var selectedCodec: WalkmanDBGenerator.AudioCodec = .atrac3
         var action: Action = .none
         
         enum Action {
@@ -58,6 +59,11 @@ public class CLIHandler {
                 if i + 1 < args.count {
                     i += 1
                     walkmanPath = args[i]
+                }
+            case "--codec", "-c":
+                if i + 1 < args.count {
+                    i += 1
+                    selectedCodec = WalkmanDBGenerator.AudioCodec.from(string: args[i])
                 }
             case "--json":
                 isJSON = true
@@ -103,7 +109,7 @@ public class CLIHandler {
             exit(0)
             
         case .detect:
-            handleDetect(isJSON: isJSON)
+            handleDetect(explicitPath: walkmanPath, isJSON: isJSON)
             
         case .scan:
             guard let folder = scanPath ?? sourcePath else {
@@ -136,7 +142,7 @@ public class CLIHandler {
                 printError("No Walkman device detected. Connect via USB or specify --walkman <path>.")
                 exit(1)
             }
-            handleSync(sourcePath: src, destinationURL: destURL, isDryRun: isDryRun, isJSON: isJSON)
+            handleSync(sourcePath: src, destinationURL: destURL, codec: selectedCodec, isDryRun: isDryRun, isJSON: isJSON)
             
         case .none:
             printUsage()
@@ -146,9 +152,15 @@ public class CLIHandler {
     
     // MARK: - Handlers
     
-    private static func handleDetect(isJSON: Bool) {
+    private static func handleDetect(explicitPath: String? = nil, isJSON: Bool) {
         let fm = FileManager.default
-        let volumes = SyncEngine.findAllWalkmanVolumes()
+        var volumes = SyncEngine.findAllWalkmanVolumes()
+        if let explicit = explicitPath {
+            let expURL = URL(fileURLWithPath: explicit)
+            if !volumes.contains(where: { $0.path == expURL.path }) {
+                volumes.append(expURL)
+            }
+        }
         var detectedDevices: [[String: Any]] = []
         
         for vol in volumes {
@@ -164,6 +176,11 @@ public class CLIHandler {
             let totalBytes = attrs?[.systemSize] as? Int64 ?? 0
             let freeBytes = attrs?[.systemFreeSize] as? Int64 ?? 0
             
+            let freeMB = freeBytes / (1024 * 1024)
+            let atrac3Songs = Int(Double(freeMB) / 1.8)
+            let lp4Songs = Int(Double(freeMB) / 1.0)
+            let mp3Songs = Int(Double(freeMB) / 7.5)
+            
             let devInfo: [String: Any] = [
                 "path": vol.path,
                 "name": name,
@@ -171,7 +188,10 @@ public class CLIHandler {
                 "hasMp3fm": hasMp3fm,
                 "deviceKey": keyHex,
                 "totalCapacityBytes": totalBytes,
-                "freeCapacityBytes": freeBytes
+                "freeCapacityBytes": freeBytes,
+                "estimatedSongsAtrac3LP2": atrac3Songs,
+                "estimatedSongsAtrac3LP4": lp4Songs,
+                "estimatedSongsMP3": mp3Songs
             ]
             detectedDevices.append(devInfo)
         }
@@ -196,9 +216,13 @@ public class CLIHandler {
                     let key = dev["deviceKey"] as? String ?? ""
                     let freeMB = (dev["freeCapacityBytes"] as? Int64 ?? 0) / (1024 * 1024)
                     let totalMB = (dev["totalCapacityBytes"] as? Int64 ?? 0) / (1024 * 1024)
+                    let atrac3Songs = dev["estimatedSongsAtrac3LP2"] as? Int ?? 0
+                    let lp4Songs = dev["estimatedSongsAtrac3LP4"] as? Int ?? 0
+                    let mp3Songs = dev["estimatedSongsMP3"] as? Int ?? 0
                     print("  [\(idx + 1)] Path:       \(path)")
                     print("      Device Key: \(key)")
                     print("      Storage:    \(freeMB) MB free / \(totalMB) MB total")
+                    print("      Capacity:   ~\(atrac3Songs) songs in ATRAC3 LP2 (132k), ~\(lp4Songs) in LP4 (66k), ~\(mp3Songs) in MP3 (320k)")
                 }
             }
         }
@@ -254,7 +278,7 @@ public class CLIHandler {
         exit(0)
     }
     
-    private static func handleSync(sourcePath: String, destinationURL: URL, isDryRun: Bool, isJSON: Bool) {
+    private static func handleSync(sourcePath: String, destinationURL: URL, codec: WalkmanDBGenerator.AudioCodec, isDryRun: Bool, isJSON: Bool) {
         let sourceURL = URL(fileURLWithPath: sourcePath)
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
             printError("Source folder not found: \(sourcePath)")
@@ -267,6 +291,7 @@ public class CLIHandler {
             print("==================================================")
             print("Source:      \(sourceURL.path)")
             print("Destination: \(destinationURL.path)")
+            print("Codec:       \(codec.displayName)")
             print("Dry Run:     \(isDryRun ? "YES" : "NO")")
             print("--------------------------------------------------")
         }
@@ -283,30 +308,37 @@ public class CLIHandler {
         
         if isDryRun {
             if isJSON {
-                print("{\"status\":\"dry-run-complete\",\"trackCount\":\(titles.count)}")
+                print("{\"status\":\"dry-run-complete\",\"trackCount\":\(titles.count),\"codec\":\"\(codec.rawValue)\"}")
             } else {
-                print("[✓] Dry run complete. \(titles.count) tracks are ready to sync.")
+                print("[✓] Dry run complete. \(titles.count) tracks are ready to sync using \(codec.displayName).")
             }
             exit(0)
         }
         
         do {
             if !isJSON {
-                print("[+] Transferring, transcoding (if required), and scrambling audio...")
+                print("[+] Encoding and transferring audio tracks (\(codec.displayName))...")
+                fflush(stdout)
             }
             
-            try SyncEngine.transferFilesToWalkman(titles: titles, destination: destinationURL) { progress in
+            try SyncEngine.transferFilesToWalkman(titles: titles, destination: destinationURL, codec: codec) { progress in
                 if !isJSON {
-                    print("    -> \(progress)")
+                    print("  -> \(progress)")
+                    fflush(stdout)
                 }
             }
             
             if !isJSON {
-                print("[+] Generating hardware-accurate OMGAUDIO database suite (all 8 DAT tables)...")
+                print("[+] Generating hardware-accurate OMGAUDIO database suite (16 DAT tables)...")
+                fflush(stdout)
             }
             
-            let generator = WalkmanDBGenerator(isEncrypted3rdGen: true)
+            let generator = WalkmanDBGenerator(codec: codec, isEncrypted3rdGen: true)
             try generator.generateDatabase(titles: titles, destination: destinationURL)
+            
+            // Clean AppleDouble files generated during DB write and flush buffers
+            SyncEngine.cleanAppleDouble(at: destinationURL)
+            sync()
             
             if isJSON {
                 let result: [String: Any] = [
@@ -359,6 +391,8 @@ public class CLIHandler {
             --help, -h                    Show this help screen
         
         OPTIONS:
+            --codec, -c <codec>           Target encoder (default: atrac3)
+                                          Options: atrac3 (132k LP2), atrac3_lp4 (66k), atrac3plus (256k), mp3 (320k)
             --source, -s <path>           Source music folder (MP3, FLAC, M4A, WAV, AIFF, OGG)
             --walkman, -w <path>          Walkman mount root (default: auto-detected in /Volumes)
             --json                        Format output as machine-readable JSON (great for agents!)

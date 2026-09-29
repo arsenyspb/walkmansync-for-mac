@@ -4,7 +4,7 @@ SWIFT_FILES = $(wildcard Sources/*.swift)
 APP_DIR = $(APP_NAME).app
 MACOS_DIR = $(APP_DIR)/Contents/MacOS
 RESOURCES_DIR = $(APP_DIR)/Contents/Resources
-VERSION = 0.1.0
+VERSION = 0.3.0
 
 all: $(APP_DIR)
 

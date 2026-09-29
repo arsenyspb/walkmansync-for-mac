@@ -99,6 +99,10 @@ struct TestRunner {
             "03GINF03.DAT",
             "01TREE04.DAT",
             "03GINF04.DAT",
+            "01TREE22.DAT",
+            "03GINF22.DAT",
+            "01TREE2D.DAT",
+            "03GINF2D.DAT",
             "02TREINF.DAT",
             "04CNTINF.DAT",
             "05CIDLST.DAT"
@@ -114,6 +118,6 @@ struct TestRunner {
         }
         
         try? FileManager.default.removeItem(at: tempDir)
-        print("Full OMGAUDIO Database Suite generation PASSED (all 12 DAT tables verified)")
+        print("Full OMGAUDIO Database Suite generation PASSED (all 16 DAT tables verified)")
     }
 }

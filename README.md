@@ -38,16 +38,21 @@ Historically, managing music on 3rd-generation Sony Walkmans required running de
 
 ## Key Features
 
-- **Direct OMGAUDIO Database Initialization**: Interacts directly with the on-device `OMGAUDIO` filesystem rather than wrapping an external library. Generates `04CNTINF.DAT` content databases with big-endian UTF-16BE metadata encoding.
-- **Zero-Friction 3rd-Generation OpenMG Support**:
-  - Automatically manages and injects the 16-byte `MP3FM/DvID.DAT` device identity key without needing Windows `CopyTool.exe`.
-  - Implements hardware-accurate in-place audio stream scrambling using Sony's key derivation formula:
-    `key = ((0x2465 + trackId * 0x5296E435) & 0xFFFFFFFF) ^ deviceKey`
-  - Encapsulates MP3 tracks into valid `.OMA` containers featuring the standard 3072-byte `ea3` ID3v2 tag and 96-byte `EA3` audio header (`0xFFFE` encryption marker).
-- **Native macOS App (Swift & AppKit)**: Zero Java runtime dependency, zero virtual machines. Blazing-fast execution and native UI.
-- **Automatic Walkman Mount Detection**: Immediately identifies connected Walkmans mounted at `/Volumes/WALKMAN`.
-- **Universal Audio Ingest & Transcoding**: Syncs native MP3s directly, or automatically transcodes **FLAC, M4A (AAC/ALAC), WAV, AIFF, and OGG** to 320kbps MP3 on-the-fly via FFmpeg.
-- **Native Metadata Extraction**: Uses macOS `AVFoundation` for instant extraction of track title, artist, album, genre, and duration across all audio formats.
+- **Direct OMGAUDIO Database Initialization**: Interacts directly with the on-device `OMGAUDIO` filesystem rather than wrapping an external library. Generates the full 16-table database suite (`00GTRLST`, `01TREE01-04/22/2D`, `02TREINF`, `03GINF01-04/22/2D`, `04CNTINF`, `05CIDLST`) with big-endian UTF-16BE metadata encoding and jog-dial navigation trees.
+- **Selectable Audio Codecs (ATRAC3 & MP3)**:
+  - **ATRAC3 LP2 (132 kbps)**: Sony's native hardware audio format, providing ~212 songs on 512 MB.
+  - **ATRAC3 LP4 (66 kbps)**: Ultra-compact storage mode providing ~383 songs on 512 MB.
+  - **ATRAC3plus (256 kbps)**: High-bitrate studio quality.
+  - **MP3 (320 kbps CBR)**: Universal MP3 audio with hardware-accurate XOR payload scrambling.
+- **Dynamic Song Capacity Estimator**:
+  - Live capacity forecasting displayed in both the AppKit GUI and CLI (`walkmansync --detect`).
+  - Automatically updates estimated song counts as you toggle between codecs.
+- **Hardware Encryption Key Extraction & Auto-Healing**:
+  - Complete reverse-engineered protocol for Sony's proprietary SCSI commands (`A4 00 ... BC ... 3F/33`).
+  - Automatic key discovery and persistent backup to `~/Library/Application Support/WalkmanSync/DvID.DAT`.
+  - Self-healing: if the Walkman is ever formatted, WalkmanSync immediately restores the authentic factory key with zero user intervention.
+- **Native macOS App (Swift & AppKit) + CLI**: Zero Java runtime dependency, zero virtual machines. Native macOS interface with official 2000s Walkman branding and full-featured CLI for terminal/scripting workflows.
+- **Universal Audio Ingest & Transcoding**: Ingests **MP3, FLAC, M4A (AAC/ALAC), WAV, AIFF, and OGG**, automatically converting and preparing containers on-the-fly.
 
 ---
 
@@ -100,10 +105,21 @@ make run
 4. Click **"Sync to Walkman"**.
 5. WalkmanSync will:
    - Extract ID3 metadata from all audio tracks.
-   - Initialize device identity and write `MP3FM/DvID.DAT` if not already present.
+   - Read device identity from `MP3FM/DvID.DAT`.
    - Encapsulate and XOR-scramble raw audio frames into `OMGAUDIO/10Fxx/1000xxxx.OMA`.
-   - Serialize and write the `04CNTINF.DAT` database structure.
+   - Serialize and write the complete 16-table OMGAUDIO database suite (`00GTRLST.DAT`, `01TREE01-04/22/2D.DAT`, `02TREINF.DAT`, `03GINF01-04/22/2D.DAT`, `04CNTINF.DAT`, `05CIDLST.DAT`).
+   - Clean macOS AppleDouble (`._*`) metadata files and flush disk caches.
 6. Safely eject the Walkman volume in Finder and enjoy your music!
+
+---
+
+## Device Encryption Key & DvID.DAT Extraction
+
+3rd-generation Network Walkman devices (NW-E400, NW-E500, and NW-HD series) require audio payloads to be scrambled with a 4-byte key unique to the player's internal ASIC/ROM. 
+
+To understand how Sony's Windows installer (`MP3FMV2_ENG.EXE` / `CopyTool.exe`) retrieves this key via vendor SCSI commands, why audio playback displays "CANNOT PLAY" without the authentic device key, and how macOS user-space kernel storage policies affect native retrieval:
+
+👉 **[Read the Full Reverse-Engineering Report: CopyTool.exe.DvID.dat.md](CopyTool.exe.DvID.dat.md)**
 
 ---
 

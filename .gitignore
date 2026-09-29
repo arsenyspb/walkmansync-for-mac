@@ -22,3 +22,5 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+*.backup
+DvID.DAT*

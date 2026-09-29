@@ -12,10 +12,72 @@ import Foundation
 // - 05CIDLST.DAT (Content ID List)
 
 public class WalkmanDBGenerator {
+    public var codec: AudioCodec
     private var isEncrypted3rdGen: Bool = true
     
-    public init(isEncrypted3rdGen: Bool = true) {
+    public init(codec: AudioCodec = .atrac3, isEncrypted3rdGen: Bool = true) {
+        self.codec = codec
         self.isEncrypted3rdGen = isEncrypted3rdGen
+    }
+    
+    public enum AudioCodec: String, CaseIterable {
+        case atrac3 = "atrac3"          // ATRAC3 LP2 (132 kbps - Sony Standard)
+        case atrac3_lp4 = "atrac3_lp4"  // ATRAC3 LP4 (66 kbps - Maximum Storage)
+        case atrac3plus = "atrac3plus"  // ATRAC3plus (256 kbps - Hi-Fi)
+        case mp3 = "mp3"                // MP3 (320 kbps CBR)
+        
+        public var displayName: String {
+            switch self {
+            case .atrac3: return "ATRAC3 (132 kbps LP2 - Sony Standard)"
+            case .atrac3_lp4: return "ATRAC3 (66 kbps LP4 - Max Storage)"
+            case .atrac3plus: return "ATRAC3plus (256 kbps - Hi-Fi)"
+            case .mp3: return "MP3 (320 kbps CBR)"
+            }
+        }
+        
+        public var averageMbPerSong: Double {
+            switch self {
+            case .atrac3: return 1.8
+            case .atrac3_lp4: return 1.0
+            case .atrac3plus: return 3.5
+            case .mp3: return 7.5
+            }
+        }
+        
+        public var fileProperties: [UInt8] {
+            switch self {
+            case .atrac3:
+                return [0x00, 0x00, 0x20, 0x30] // 0x00 = ATRAC3, 132kbps LP2
+            case .atrac3_lp4:
+                return [0x00, 0x00, 0x10, 0x30] // 0x00 = ATRAC3, 66kbps LP4
+            case .atrac3plus:
+                return [0x00, 0x00, 0x40, 0x00] // 0x00 = ATRAC3plus 256kbps
+            case .mp3:
+                return [0x03, 0x80, 0xD9, 0x10] // 0x03 = MP3 CBR 320kbps
+            }
+        }
+        
+        public var protectionBytes: [UInt8] {
+            switch self {
+            case .mp3:
+                return [0xFF, 0xFE] // 3rd Gen OpenMG MP3 Encryption
+            case .atrac3, .atrac3_lp4, .atrac3plus:
+                return [0xFF, 0xFF] // Standard OpenMG ATRAC container (no DRM scrambling)
+            }
+        }
+        
+        public static func from(string: String) -> AudioCodec {
+            let lower = string.lowercased().replacingOccurrences(of: "-", with: "_")
+            if lower.contains("lp4") || lower == "atrac3_lp4" || lower == "lp4" || lower == "66" {
+                return .atrac3_lp4
+            } else if lower.contains("plus") || lower.contains("3p") || lower == "atrac3plus" || lower == "256" {
+                return .atrac3plus
+            } else if lower.contains("mp3") || lower == "320" {
+                return .mp3
+            } else {
+                return .atrac3
+            }
+        }
     }
     
     public struct WalkmanTitle {
@@ -68,6 +130,14 @@ public class WalkmanDBGenerator {
         // 5. Genre trees (01TREE04 and 03GINF04)
         try write01TREE04and03GINF04(omgAudioDir: omgAudioDir, titles: titles)
         WalkmanLogger.info("Generated 01TREE04.DAT & 03GINF04.DAT (Genre navigation)")
+        
+        // 5b. Tree 22 (01TREE22 and 03GINF22)
+        try write01TREE22and03GINF22(omgAudioDir: omgAudioDir)
+        WalkmanLogger.info("Generated 01TREE22.DAT & 03GINF22.DAT")
+        
+        // 5c. Tree 2D (01TREE2D and 03GINF2D - Artist/Album jog-dial navigation)
+        try write01TREE2Dand03GINF2D(omgAudioDir: omgAudioDir, titles: titles)
+        WalkmanLogger.info("Generated 01TREE2D.DAT & 03GINF2D.DAT (Jog-dial navigation)")
         
         // 6. Tree Information (02TREINF)
         try write02TREINF(omgAudioDir: omgAudioDir, titles: titles)
@@ -416,7 +486,152 @@ public class WalkmanDBGenerator {
         try data34.write(to: omgAudioDir.appendingPathComponent("03GINF04.DAT"), options: .atomic)
     }
     
-    // MARK: - 6. 02TREINF.DAT
+    // MARK: - 5b. 01TREE22.DAT & 03GINF22.DAT
+    private func write01TREE22and03GINF22(omgAudioDir: URL) throws {
+        var data122 = Data()
+        var data322 = Data()
+        
+        // Header 122
+        data122.append(writeTableHeader(tableName: "TREE", numberOfClasses: 2))
+        data122.append(writeClassDescription(className: "GPLB", startAddress: 0x30, length: 0x10))
+        data122.append(writeClassDescription(className: "TPLB", startAddress: 0x40, length: 0x10))
+        
+        // Header 322
+        data322.append(writeTableHeader(tableName: "GPIF", numberOfClasses: 1))
+        data322.append(writeClassDescription(className: "GPFB", startAddress: 0x20, length: 0x10))
+        
+        // 122 Class 1 (GPLB)
+        data122.append(writeClassHeader(className: "GPLB", numberOfElements: 0, lengthOfOneElement: 0x8, complement1: 0, complement2: 0))
+        // 322 Class 1 (GPFB)
+        data322.append(writeClassHeader(className: "GPFB", numberOfElements: 0, lengthOfOneElement: 0x310))
+        // 122 Class 2 (TPLB)
+        data122.append(writeClassHeader(className: "TPLB", numberOfElements: 0, lengthOfOneElement: 0x2, complement1: 0, complement2: 0))
+        
+        try data122.write(to: omgAudioDir.appendingPathComponent("01TREE22.DAT"), options: .atomic)
+        try data322.write(to: omgAudioDir.appendingPathComponent("03GINF22.DAT"), options: .atomic)
+    }
+    
+    // MARK: - 5c. 01TREE2D.DAT & 03GINF2D.DAT (Artist & Album Jog-Dial Navigation)
+    private func write01TREE2Dand03GINF2D(omgAudioDir: URL, titles: [WalkmanTitle]) throws {
+        var data12D = Data()
+        var data32D = Data()
+        
+        let sortedTitles = titles.sorted {
+            if $0.artistName != $1.artistName { return $0.artistName < $1.artistName }
+            if $0.albumName != $1.albumName { return $0.albumName < $1.albumName }
+            return $0.id < $1.id
+        }
+        
+        var titlesIdInTPLB: [Int] = []
+        var artistsSorted: [String] = []
+        var albumsSorted: [String] = []
+        var titleKeysSorted: [Int] = []
+        var gplbElements: [Int] = []
+        var albumsCounter: [Int] = []
+        
+        var lastArtistName = ""
+        var lastAlbumName = ""
+        var tempKey = 0
+        var albumCounter = 0
+        
+        for (i, title) in sortedTitles.enumerated() {
+            let artist = title.artistName.isEmpty ? "Unknown Artist" : title.artistName
+            let album = title.albumName.isEmpty ? "Unknown Album" : title.albumName
+            let titleLengthMs = title.length * 1000
+            
+            if album != lastAlbumName {
+                if artist != lastArtistName {
+                    artistsSorted.append(artist)
+                    if !albumsSorted.isEmpty {
+                        albumsCounter.append(albumCounter)
+                    }
+                    lastArtistName = artist
+                    albumCounter = 0
+                    tempKey = titleLengthMs
+                }
+                albumsSorted.append(album)
+                gplbElements.append(i + 1)
+                if !albumsSorted.isEmpty {
+                    titleKeysSorted.append(tempKey)
+                }
+                lastAlbumName = album
+                albumCounter += 1
+                tempKey = titleLengthMs
+            } else {
+                tempKey += titleLengthMs
+            }
+            titlesIdInTPLB.append(title.id)
+        }
+        
+        if !albumsSorted.isEmpty {
+            titleKeysSorted.append(tempKey)
+            albumsCounter.append(albumCounter)
+        }
+        
+        let totalElements = artistsSorted.count + albumsSorted.count + 1
+        
+        // 01TREE2D Header
+        data12D.append(writeTableHeader(tableName: "TREE", numberOfClasses: 2))
+        data12D.append(writeClassDescription(className: "GPLB", startAddress: 0x30, length: 0x4010))
+        var class12D1Length = titles.count * 2 + 0x10
+        if class12D1Length % 0x10 != 0 {
+            class12D1Length += 0x10 - (class12D1Length % 0x10)
+        }
+        data12D.append(writeClassDescription(className: "TPLB", startAddress: 0x4040, length: class12D1Length))
+        
+        // 03GINF2D Header
+        data32D.append(writeTableHeader(tableName: "GPIF", numberOfClasses: 1))
+        data32D.append(writeClassDescription(className: "GPFB", startAddress: 0x20, length: totalElements * 0x110 + 0x10))
+        
+        // 01TREE2D Class 1 (GPLB)
+        data12D.append(writeClassHeader(className: "GPLB", numberOfElements: totalElements, lengthOfOneElement: 0x8, complement1: UInt32(totalElements), complement2: 0))
+        
+        // 03GINF2D Class 1 (GPFB)
+        data32D.append(writeClassHeader(className: "GPFB", numberOfElements: totalElements, lengthOfOneElement: 0x110))
+        
+        // Element 0: Empty root element
+        data12D.append(writeGPLBelement(itemId: 1, titleId: 0))
+        data32D.append(writeGPFB2Delement(albumKey: 0, name1: "", name2: ""))
+        
+        var albumSortedCounter = 0
+        for i in 0..<artistsSorted.count {
+            let artist = artistsSorted[i]
+            data12D.append(writeGPLBelement(itemId: i + albumSortedCounter + 2, titleId: 0))
+            data32D.append(writeGPFB2Delement(albumKey: 0, name1: artist, name2: artist))
+            
+            let numAlbums = (i < albumsCounter.count) ? albumsCounter[i] : 0
+            for _ in 0..<numAlbums {
+                if albumSortedCounter < albumsSorted.count {
+                    let album = albumsSorted[albumSortedCounter]
+                    let key = (albumSortedCounter < titleKeysSorted.count) ? titleKeysSorted[albumSortedCounter] : 0
+                    let firstTitleId = (albumSortedCounter < gplbElements.count) ? gplbElements[albumSortedCounter] : 1
+                    
+                    data12D.append(writeGPLBelement2(itemId: i + albumSortedCounter + 3, titleId: firstTitleId))
+                    data32D.append(writeGPFB2Delement(albumKey: key, name1: album, name2: album))
+                    albumSortedCounter += 1
+                }
+            }
+        }
+        
+        // Zero pad Class 1 of 01TREE2D to 0x4010
+        let padClass1 = 0x4010 - 0x10 - (0x8 * totalElements)
+        if padClass1 > 0 {
+            data12D.append(Data(count: padClass1))
+        }
+        
+        // 01TREE2D Class 2 (TPLB)
+        data12D.append(writeClassHeader(className: "TPLB", numberOfElements: titlesIdInTPLB.count, lengthOfOneElement: 0x2, complement1: UInt32(titlesIdInTPLB.count), complement2: 0))
+        for trackId in titlesIdInTPLB {
+            data12D.append(int2bytes(trackId, length: 2))
+        }
+        let padTPLB = 0x10 - ((titlesIdInTPLB.count * 2) % 0x10)
+        if padTPLB < 0x10 {
+            data12D.append(Data(count: padTPLB))
+        }
+        
+        try data12D.write(to: omgAudioDir.appendingPathComponent("01TREE2D.DAT"), options: .atomic)
+        try data32D.write(to: omgAudioDir.appendingPathComponent("03GINF2D.DAT"), options: .atomic)
+    }
     private func write02TREINF(omgAudioDir: URL, titles: [WalkmanTitle]) throws {
         var data = Data()
         data.append(writeTableHeader(tableName: "GTIF", numberOfClasses: 1))
@@ -465,9 +680,9 @@ public class WalkmanDBGenerator {
         if maxValue > 0 {
             for id in 1...maxValue {
                 if let title = titles.first(where: { $0.id == id }) {
-                    data.append(writeCNFBelement(title: title, gotKey: isEncrypted3rdGen))
+                    data.append(writeCNFBelement(title: title, codec: codec))
                 } else {
-                    data.append(writeCNFBelement(title: nil, gotKey: isEncrypted3rdGen))
+                    data.append(writeCNFBelement(title: nil, codec: codec))
                 }
             }
         }
@@ -577,6 +792,27 @@ public class WalkmanDBGenerator {
         return d
     }
     
+    private func writeGPLBelement2(itemId: Int, titleId: Int) -> Data {
+        var d = Data()
+        d.append(int2bytes(itemId, length: 2))
+        d.append(contentsOf: [0x02, 0x00])
+        d.append(int2bytes(titleId, length: 2))
+        d.append(Data(count: 2))
+        return d
+    }
+    
+    private func writeGPFB2Delement(albumKey: Int, name1: String, name2: String) -> Data {
+        var d = Data()
+        d.append(Data(count: 8))
+        d.append(int2bytes(albumKey, length: 4))
+        d.append(contentsOf: [0x00, 0x02, 0x00, 0x80])
+        
+        let constant2: [UInt8] = [0x00, 0x02]
+        appendSubElement(&d, tag: "TIT2", text: name1, constant: constant2)
+        appendSubElement(&d, tag: "XSOT", text: name2, constant: constant2)
+        return d
+    }
+    
     private func writeGPFBelement(albumKey: Int, albumName: String, artistName: String, genre: String) -> Data {
         var d = Data()
         d.append(Data(count: 8))
@@ -617,24 +853,16 @@ public class WalkmanDBGenerator {
         return d
     }
     
-    private func writeCNFBelement(title: WalkmanTitle?, gotKey: Bool) -> Data {
+    private func writeCNFBelement(title: WalkmanTitle?, codec: AudioCodec) -> Data {
         var d = Data()
         let constant1: [UInt8] = [0x00, 0x05, 0x00, 0x80]
         let constant2: [UInt8] = [0x00, 0x02]
         
         if let t = title {
             d.append(contentsOf: [0x00, 0x00])
-            
-            // Protection Flag
-            if gotKey {
-                d.append(contentsOf: [0xFF, 0xFE]) // 3rd Gen OpenMG MP3 Encryption
-            } else {
-                d.append(contentsOf: [0xFF, 0xFF])
-            }
-            
-            // File properties: MP3 (0x03), CBR (0x80), MPEG-1 Layer 3 128kbps (0xD9), Stereo (0x10)
-            d.append(contentsOf: [0x03, 0x80, 0xD9, 0x10])
-            d.append(int2bytes(t.length * 1000, length: 4)) // length in ms
+            d.append(contentsOf: codec.protectionBytes)
+            d.append(contentsOf: codec.fileProperties)
+            d.append(int2bytes(t.length * 1000, length: 4))
             d.append(contentsOf: constant1)
             
             appendSubElement(&d, tag: "TIT2", text: t.titleName, constant: constant2)

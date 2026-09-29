@@ -152,24 +152,46 @@ public enum OMAContainerBuilder {
         return header
     }
     
-    /// Strips ID3v2 header from MP3 to extract raw audio frames
+    /// Strips ID3v2 header, padding zeros, and Xing header from MP3 to extract raw audio frames starting cleanly with 0xFF 0xEx/0xFx
     public static func extractRawMP3Audio(from fileURL: URL) throws -> Data {
         let fileData = try Data(contentsOf: fileURL, options: .mappedIfSafe)
         guard fileData.count > 10 else { return fileData }
         
+        var startOffset = 0
         if fileData[0] == 0x49 && fileData[1] == 0x44 && fileData[2] == 0x33 { // "ID3"
             let flags = fileData[5]
             let size = (Int(fileData[6]) << 21) |
                        (Int(fileData[7]) << 14) |
                        (Int(fileData[8]) << 7)  |
                        Int(fileData[9])
-            var offset = 10 + size
+            startOffset = 10 + size
             if (flags & 0x10) != 0 {
-                offset += 10 // ID3v2.4 footer
+                startOffset += 10 // ID3v2.4 footer
             }
-            if offset < fileData.count {
-                return fileData.subdata(in: offset..<fileData.count)
+        }
+        
+        // Scan forward past any ID3 padding/zeros to find the first valid MPEG sync word (0xFF 0xEx/0xFx)
+        var mpegStart = startOffset
+        while mpegStart < fileData.count - 4 {
+            if fileData[mpegStart] == 0xFF {
+                let second = fileData[mpegStart + 1]
+                if (second & 0xE0) == 0xE0 && (second & 0x18) != 0x08 && (second & 0x06) != 0x00 {
+                    break
+                }
             }
+            mpegStart += 1
+        }
+        
+        if mpegStart < fileData.count {
+            var endOffset = fileData.count
+            // Check for trailing ID3v1 (128 bytes starting with "TAG")
+            if endOffset >= mpegStart + 128 {
+                let tagOffset = endOffset - 128
+                if fileData[tagOffset] == 0x54 && fileData[tagOffset + 1] == 0x41 && fileData[tagOffset + 2] == 0x47 { // "TAG"
+                    endOffset -= 128
+                }
+            }
+            return fileData.subdata(in: mpegStart..<endOffset)
         }
         return fileData
     }
@@ -193,5 +215,19 @@ public enum OMAContainerBuilder {
         oma.append(ea3AudioHeader)
         oma.append(rawAudio)
         return oma
+    }
+    
+    /// Creates a complete ATRAC .OMA file (3072-byte EA3 tag + 96-byte EA3 audio header + ATRAC bitstream)
+    public static func createAtracOMA(
+        title: WalkmanDBGenerator.WalkmanTitle,
+        atracOmaURL: URL
+    ) throws -> Data {
+        let tag = buildEA3Tag(title: title)
+        let omaBody = try Data(contentsOf: atracOmaURL)
+        var fullOMA = Data()
+        fullOMA.reserveCapacity(tag.count + omaBody.count)
+        fullOMA.append(tag)
+        fullOMA.append(omaBody)
+        return fullOMA
     }
 }
