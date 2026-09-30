@@ -17,6 +17,9 @@ test:
 		WalkmanSync/Sources/WalkmanKeyManager.swift \
 		WalkmanSync/Sources/OMAContainerBuilder.swift \
 		WalkmanSync/Sources/WalkmanDBGenerator.swift \
+		WalkmanSync/Sources/SyncEngine.swift \
+		WalkmanSync/Sources/WalkmanCleaner.swift \
+		WalkmanSync/Sources/WalkmanTrackDumper.swift \
 		Tests/TestRunner.swift \
 		-o bin/test_runner
 	@./bin/test_runner

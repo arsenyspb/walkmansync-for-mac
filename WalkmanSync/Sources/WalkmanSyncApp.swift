@@ -419,18 +419,136 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = ffmpeg != nil ? .informational : .warning
         
         alert.addButton(withTitle: "OK")
-        if ffmpeg == nil {
-            alert.addButton(withTitle: "Copy 'brew install ffmpeg'")
+        if let vol = walkman {
+            alert.addButton(withTitle: "📥 Dump Tracks to Mac...")
+            alert.addButton(withTitle: "🗑️ Erase Walkman Music...")
+            
+            let response = alert.runModal()
+            if response == .alertSecondButtonReturn {
+                startDumpTracks(walkmanURL: vol)
+            } else if response == .alertThirdButtonReturn {
+                startEraseWalkman(walkmanURL: vol)
+            }
+        } else {
+            if ffmpeg == nil {
+                alert.addButton(withTitle: "Copy 'brew install ffmpeg'")
+            }
+            alert.addButton(withTitle: "📖 View Online Guide")
+            
+            let response = alert.runModal()
+            if ffmpeg == nil && response == .alertSecondButtonReturn {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString("brew install ffmpeg", forType: .string)
+            } else if (ffmpeg == nil && response == .alertThirdButtonReturn) || (ffmpeg != nil && response == .alertSecondButtonReturn) {
+                if let url = URL(string: "https://github.com/arsenyspb/walkmansync-for-mac#dependencies--audio-encoders") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         }
-        alert.addButton(withTitle: "📖 View Online Guide")
+    }
+    
+    func startDumpTracks(walkmanURL: URL) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Export Tracks Here"
+        panel.message = "Choose a destination folder to export your Walkman music library:"
         
-        let response = alert.runModal()
-        if ffmpeg == nil && response == .alertSecondButtonReturn {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString("brew install ffmpeg", forType: .string)
-        } else if (ffmpeg == nil && response == .alertThirdButtonReturn) || (ffmpeg != nil && response == .alertSecondButtonReturn) {
-            if let url = URL(string: "https://github.com/arsenyspb/walkmansync-for-mac#dependencies--audio-encoders") {
-                NSWorkspace.shared.open(url)
+        if panel.runModal() == .OK, let destURL = panel.url {
+            syncButton?.isEnabled = false
+            statusLabel?.stringValue = "Scanning and descrambling tracks from Walkman..."
+            statusLabel?.textColor = .labelColor
+            
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                do {
+                    let result = try WalkmanTrackDumper.dumpTracks(from: walkmanURL, to: destURL) { cur, tot, title in
+                        DispatchQueue.main.async {
+                            self?.statusLabel?.stringValue = "[\(cur)/\(tot)] Descrambling \(title)..."
+                        }
+                    }
+                    
+                    DispatchQueue.main.async {
+                        self?.syncButton?.isEnabled = true
+                        self?.statusLabel?.stringValue = "✓ Dumped \(result.tracksDumped) tracks to \(destURL.lastPathComponent)"
+                        self?.statusLabel?.textColor = .systemGreen
+                        
+                        let alert = NSAlert()
+                        alert.messageText = "Track Export Completed"
+                        alert.informativeText = "Successfully recovered and descrambled \(result.tracksDumped) MP3 tracks to:\n\(result.outputDirectory.path)"
+                        alert.addButton(withTitle: "Show in Finder")
+                        alert.addButton(withTitle: "OK")
+                        if alert.runModal() == .alertFirstButtonReturn {
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: result.outputDirectory.path)
+                        }
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self?.syncButton?.isEnabled = true
+                        self?.statusLabel?.stringValue = "Export failed: \(error.localizedDescription)"
+                        self?.statusLabel?.textColor = .systemRed
+                        
+                        let errAlert = NSAlert()
+                        errAlert.messageText = "Track Export Failed"
+                        errAlert.informativeText = error.localizedDescription
+                        errAlert.alertStyle = .critical
+                        errAlert.runModal()
+                    }
+                }
+            }
+        }
+    }
+    
+    func startEraseWalkman(walkmanURL: URL) {
+        let confirmAlert = NSAlert()
+        confirmAlert.messageText = "Erase All Music from \(walkmanURL.lastPathComponent)?"
+        confirmAlert.informativeText = "This will delete all music tracks and reset the OMGAUDIO database so your Walkman shows 'NO DATA' (100% free space).\n\nYour authentic hardware encryption key (DvID.DAT) will be safely preserved so future syncs will play immediately."
+        confirmAlert.alertStyle = .critical
+        confirmAlert.addButton(withTitle: "Cancel")
+        let eraseBtn = confirmAlert.addButton(withTitle: "Erase Music")
+        if #available(macOS 11.0, *) {
+            eraseBtn.hasDestructiveAction = true
+        }
+        
+        guard confirmAlert.runModal() == .alertSecondButtonReturn else { return }
+        
+        syncButton?.isEnabled = false
+        statusLabel?.stringValue = "Erasing Walkman and cleaning storage..."
+        statusLabel?.textColor = .labelColor
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let result = try WalkmanCleaner.eraseWalkman(at: walkmanURL) { status in
+                    DispatchQueue.main.async {
+                        self?.statusLabel?.stringValue = status
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    self?.syncButton?.isEnabled = true
+                    self?.updateStorageDisplay()
+                    
+                    let keyHex = String(format: "0x%08X", result.keyPreserved)
+                    self?.statusLabel?.stringValue = "✓ Erased \(result.tracksDeleted) tracks (Key \(keyHex) preserved)"
+                    self?.statusLabel?.textColor = .systemGreen
+                    
+                    let doneAlert = NSAlert()
+                    doneAlert.messageText = "Walkman Reset Complete"
+                    doneAlert.informativeText = "Successfully erased \(result.tracksDeleted) tracks and cleaned all hidden storage leaks.\n\nHardware Key: \(keyHex) (\(result.keyWasAuthentic ? "Authentic ✓" : "Default"))\nYour player now shows 'NO DATA' with 100% capacity."
+                    doneAlert.runModal()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self?.syncButton?.isEnabled = true
+                    self?.statusLabel?.stringValue = "Erase failed: \(error.localizedDescription)"
+                    self?.statusLabel?.textColor = .systemRed
+                    
+                    let errAlert = NSAlert()
+                    errAlert.messageText = "Erase Failed"
+                    errAlert.informativeText = error.localizedDescription
+                    errAlert.alertStyle = .critical
+                    errAlert.runModal()
+                }
             }
         }
     }

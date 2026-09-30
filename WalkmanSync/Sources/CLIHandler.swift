@@ -14,7 +14,9 @@ public class CLIHandler {
         var isJSON = false
         var isDryRun = false
         var isVerbose = false
+        var isForce = false
         var sourcePath: String?
+        var dumpPath: String?
         var walkmanPath: String?
         var scanPath: String?
         var cacheDirPath: String?
@@ -31,6 +33,8 @@ public class CLIHandler {
             case scan
             case sync
             case clean
+            case erase
+            case dump
             case extractKey
             case extractKeyInternal
             case checkUpdate
@@ -58,6 +62,16 @@ public class CLIHandler {
                 action = .sync
             case "--clean":
                 action = .clean
+            case "--erase", "--wipe":
+                action = .erase
+            case "--dump":
+                action = .dump
+                if i + 1 < args.count && !args[i + 1].starts(with: "-") {
+                    i += 1
+                    dumpPath = args[i]
+                }
+            case "--force", "-f", "-y":
+                isForce = true
             case "--check-update", "-u":
                 action = .checkUpdate
             case "--extract-key", "-k":
@@ -172,6 +186,17 @@ public class CLIHandler {
                 print("✓ Successfully cleaned macOS AppleDouble (._*) files from \(url.path)")
             }
             exit(0)
+            
+        case .erase:
+            handleErase(explicitPath: walkmanPath, isForce: isForce, isDryRun: isDryRun, isJSON: isJSON)
+            
+        case .dump:
+            let outPath = dumpPath ?? sourcePath
+            guard let dest = outPath else {
+                printError("Missing dump output folder. Usage: walkmansync --dump <output_path>")
+                exit(1)
+            }
+            handleDump(explicitWalkman: walkmanPath, destinationPath: dest, isJSON: isJSON)
             
         case .extractKey:
             handleExtractKey(explicitPath: walkmanPath, isJSON: isJSON)
@@ -305,6 +330,18 @@ public class CLIHandler {
         let hasCachedKey = FileManager.default.fileExists(atPath: appSupportDir.path)
         let resolvedKey: UInt32? = destinationURL != nil ? WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destinationURL!) : (hasCachedKey ? WalkmanKeyManager.readDeviceKey(from: appSupportDir) : nil)
         
+        var onDeviceTrackCount = 0
+        if let vol = destinationURL {
+            let omgURL = vol.appendingPathComponent("OMGAUDIO")
+            if let enumerator = FileManager.default.enumerator(at: omgURL, includingPropertiesForKeys: nil) {
+                for case let fileURL as URL in enumerator {
+                    if fileURL.pathExtension.uppercased() == "OMA" {
+                        onDeviceTrackCount += 1
+                    }
+                }
+            }
+        }
+        
         if isJSON {
             let jsonDict: [String: Any] = [
                 "ffmpeg": [
@@ -319,7 +356,8 @@ public class CLIHandler {
                 "walkman": [
                     "connected": destinationURL != nil,
                     "mountPath": destinationURL?.path ?? "",
-                    "hardwareKey": resolvedKey != nil ? String(format: "0x%08X", resolvedKey!) : ""
+                    "hardwareKey": resolvedKey != nil ? String(format: "0x%08X", resolvedKey!) : "",
+                    "trackCount": onDeviceTrackCount
                 ],
                 "cachedKey": [
                     "available": hasCachedKey,
@@ -373,6 +411,13 @@ public class CLIHandler {
             } else {
                 print("  [!] Hardware Key: Not yet resolved on device (Run 'walkmansync --extract-key')")
             }
+            if onDeviceTrackCount > 0 {
+                print("  [✓] Music Tracks: \(onDeviceTrackCount) tracks found on Walkman")
+                print("                    -> Export to Mac: 'walkmansync --dump ~/Music/WalkmanDump'")
+                print("                    -> Erase device:  'walkmansync --erase'")
+            } else {
+                print("  [•] Music Tracks: 0 tracks (Device is empty / NO DATA)")
+            }
         } else {
             print("  [-] Walkman USB:  Not connected (Connect Walkman via USB to sync)")
             if hasCachedKey, let key = resolvedKey {
@@ -394,6 +439,144 @@ public class CLIHandler {
         }
         print("==================================================")
         exit(0)
+    }
+    
+    private static func handleErase(explicitPath: String?, isForce: Bool, isDryRun: Bool, isJSON: Bool) {
+        guard let targetURL = resolveWalkmanURL(explicitPath: explicitPath) else {
+            printError("No Walkman device detected. Connect via USB or specify --walkman <path>.")
+            exit(1)
+        }
+        
+        if isDryRun {
+            let omgURL = targetURL.appendingPathComponent("OMGAUDIO")
+            var tracksFound = 0
+            var bytes: Int64 = 0
+            if let enumerator = FileManager.default.enumerator(at: omgURL, includingPropertiesForKeys: [.fileSizeKey]) {
+                for case let fileURL as URL in enumerator {
+                    if fileURL.pathExtension.uppercased() == "OMA" {
+                        tracksFound += 1
+                        if let res = try? fileURL.resourceValues(forKeys: [.fileSizeKey]), let sz = res.fileSize {
+                            bytes += Int64(sz)
+                        }
+                    }
+                }
+            }
+            if isJSON {
+                print("{\"status\":\"dry-run\",\"action\":\"erase\",\"tracksFound\":\(tracksFound),\"bytes\":\(bytes),\"walkman\":\"\(targetURL.path)\"}")
+            } else {
+                print("[DRY-RUN] Erase would remove \(tracksFound) tracks (\(bytes / (1024 * 1024)) MB) from \(targetURL.path) and reset OMGAUDIO database.")
+            }
+            exit(0)
+        }
+        
+        if !isForce {
+            print("⚠️  WARNING: You are about to ERASE ALL MUSIC from your Sony Walkman:")
+            print("    Path: \(targetURL.path)")
+            print("    All .OMA tracks and database tables will be deleted.")
+            print("    The hardware encryption key (DvID.DAT) will be safely preserved.")
+            print("")
+            print("Are you sure you want to proceed? (y/N): ", terminator: "")
+            fflush(stdout)
+            guard let line = readLine(), line.lowercased().starts(with: "y") else {
+                print("Erase cancelled.")
+                exit(0)
+            }
+        }
+        
+        do {
+            if !isJSON {
+                print("[+] Erasing Walkman music and purging macOS junk...")
+                fflush(stdout)
+            }
+            let result = try WalkmanCleaner.eraseWalkman(at: targetURL, force: isForce) { msg in
+                if !isJSON {
+                    print("  -> \(msg)")
+                    fflush(stdout)
+                }
+            }
+            if isJSON {
+                let dict: [String: Any] = [
+                    "status": "success",
+                    "action": "erase",
+                    "tracksDeleted": result.tracksDeleted,
+                    "bytesFreed": result.bytesFreed,
+                    "keyPreserved": String(format: "0x%08X", result.keyPreserved),
+                    "walkman": result.mountPath
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
+                   let str = String(data: data, encoding: .utf8) {
+                    print(str)
+                }
+            } else {
+                print("--------------------------------------------------")
+                print("✓ Walkman successfully erased and reset!")
+                print("  Erased: \(result.tracksDeleted) tracks (\(result.bytesFreed / (1024 * 1024)) MB freed)")
+                print("  Key Preserved: 0x\(String(format: "%08X", result.keyPreserved)) (\(result.keyWasAuthentic ? "Authentic ✓" : "Default"))")
+                print("  Device is ready with clean 'NO DATA' (100% capacity).")
+                print("==================================================")
+            }
+            exit(0)
+        } catch {
+            printError("Failed to erase Walkman: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+    
+    private static func handleDump(explicitWalkman: String?, destinationPath: String, isJSON: Bool) {
+        guard let targetURL = resolveWalkmanURL(explicitPath: explicitWalkman) else {
+            printError("No Walkman device detected. Connect via USB or specify --walkman <path>.")
+            exit(1)
+        }
+        
+        let destURL = URL(fileURLWithPath: destinationPath)
+        
+        if !isJSON {
+            print("==================================================")
+            print("WalkmanSync — Reverse-Descramble & Track Dumper")
+            print("==================================================")
+            print("Walkman:     \(targetURL.path)")
+            print("Destination: \(destURL.path)")
+            print("--------------------------------------------------")
+            print("[+] Scanning and descrambling tracks from Walkman...")
+            fflush(stdout)
+        }
+        
+        do {
+            let result = try WalkmanTrackDumper.dumpTracks(from: targetURL, to: destURL) { cur, tot, title in
+                if !isJSON {
+                    print("  [\(cur)/\(tot)] Descrambled: \(title)")
+                    fflush(stdout)
+                }
+            }
+            
+            if isJSON {
+                let dict: [String: Any] = [
+                    "status": "success",
+                    "action": "dump",
+                    "tracksFound": result.totalTracksFound,
+                    "tracksDumped": result.tracksDumped,
+                    "tracksFailed": result.tracksFailed,
+                    "totalBytesWritten": result.totalBytesWritten,
+                    "outputDirectory": result.outputDirectory.path
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
+                   let str = String(data: data, encoding: .utf8) {
+                    print(str)
+                }
+            } else {
+                print("--------------------------------------------------")
+                print("✓ Successfully dumped \(result.tracksDumped) tracks to:")
+                print("  \(result.outputDirectory.path)")
+                if result.tracksFailed > 0 {
+                    print("  (Warning: \(result.tracksFailed) tracks could not be decoded)")
+                }
+                print("==================================================")
+            }
+            exit(0)
+        } catch {
+            printError("Failed to dump tracks: \(error.localizedDescription)")
+            exit(1)
+        }
     }
     
     private static func handleScan(folderPath: String, isJSON: Bool) {
@@ -734,7 +917,9 @@ public class CLIHandler {
         ACTIONS:
             --detect, -d                  Detect and inspect connected Walkman devices
             --extract-key, -k             Extract authentic hardware encryption key from Walkman
-            --doctor, -D                  Check system health, dependencies (FFmpeg, ATRAC), and keys
+            --doctor, -D                  Check system health, dependencies (FFmpeg), and keys
+            --erase                       Safely wipe all tracks and reset database (preserves key)
+            --dump <folder>               Dump and reverse-descramble all tracks from Walkman to Mac
             --check-update, -u            Check GitHub for newer WalkmanSync releases
             --scan <folder>               Scan music folder and list tracks, formats, metadata
             --sync --source <folder>      Sync local music folder to Walkman
@@ -747,8 +932,9 @@ public class CLIHandler {
             --vbr                         Enable Variable Bit Rate (uses selected bitrate as ceiling)
             --source, -s <path>           Source music folder (MP3, FLAC, M4A, WAV, AIFF, OGG)
             --walkman, -w <path>          Walkman mount root (default: auto-detected in /Volumes)
+            --force, -f, -y               Skip interactive prompts for destructive actions (--erase)
             --json                        Format output as machine-readable JSON (great for agents!)
-            --dry-run                     Simulate sync operations without writing to flash
+            --dry-run                     Simulate sync or erase operations without writing to flash
             --verbose                     Enable detailed debug logging to stdout
         
         EXAMPLES:

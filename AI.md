@@ -41,7 +41,9 @@ The application operates in **dual-mode**:
 
 ## 3. Architecture & Module Map
 * `WalkmanSync/Sources/WalkmanSyncApp.swift`: Main entry point (`WalkmanSyncMain`), routes to CLI or GUI mode, handles AppKit UI lifecycle, dynamic dock icon, and periodic USB volume detection.
-* `WalkmanSync/Sources/CLIHandler.swift`: Command-line interface parser supporting `--detect`, `--scan`, `--sync`, `--clean`, `--dry-run`, `--json`, and `--verbose`.
+* `WalkmanSync/Sources/CLIHandler.swift`: Command-line interface parser supporting `--detect`, `--scan`, `--sync`, `--erase`, `--dump`, `--clean`, `--dry-run`, `--json`, and `--verbose`.
+* `WalkmanSync/Sources/WalkmanCleaner.swift`: Device Erase and Reset engine. Purges `.OMA` audio and hidden macOS garbage (`.Trashes`, `.Spotlight-V100`, `.fseventsd`, AppleDouble files), preserves authentic `DvID.DAT`, and generates an empty 16-table OMGAUDIO database showing `NO DATA`.
+* `WalkmanSync/Sources/WalkmanTrackDumper.swift`: Reverse-descrambles `.OMA` files from Walkman using authentic hardware key derivation and OpenMG container unwrapping, recovering bit-perfect `.mp3` files with standard ID3v2.3 tags.
 * `WalkmanSync/Sources/SyncEngine.swift`: Enumerates local MP3 files, extracts metadata via `AVFoundation`, prepares directories, drives OMA conversion, and manages the sync pipeline.
 * `WalkmanSync/Sources/OMAContainerBuilder.swift`: Strips MP3 ID3 tags, constructs the 3072-byte `ea3` tag, 96-byte `EA3` header, and assembles the encrypted `.OMA` payload.
 * `WalkmanSync/Sources/WalkmanDBGenerator.swift`: Generates the complete 8-table (12 files) OMGAUDIO database suite (`00GTRLST`, `01TREE01..04`, `02TREINF`, `03GINF01..04`, `04CNTINF`, `05CIDLST`) with UTF-16BE metadata strings and group relationships.

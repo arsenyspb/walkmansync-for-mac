@@ -11,6 +11,9 @@ struct TestRunner {
         testHardwareKeyParsingFromResponse()
         testMultiDeviceCaching()
         testFullDatabaseSuiteGeneration()
+        testEmptyDatabaseGeneration()
+        testWalkmanCleaner()
+        testWalkmanTrackDumperRoundTrip()
         print("ALL TESTS PASSED!")
     }
 
@@ -186,5 +189,152 @@ struct TestRunner {
         
         try? FileManager.default.removeItem(at: tempDir)
         print("Full OMGAUDIO Database Suite generation PASSED (all 16 DAT tables verified)")
+    }
+
+    static func testEmptyDatabaseGeneration() {
+        print("Testing Empty OMGAUDIO Database Suite generation (0 tracks)...")
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("EmptyDBTest_\(UUID().uuidString)")
+        
+        let gen = WalkmanDBGenerator(mp3Bitrate: .kbps192, isVBR: false, isEncrypted3rdGen: true)
+        try! gen.generateDatabase(titles: [], destination: tempDir)
+        
+        let omgDir = tempDir.appendingPathComponent("OMGAUDIO")
+        let expectedFiles = [
+            "00GTRLST.DAT",
+            "01TREE01.DAT",
+            "03GINF01.DAT",
+            "01TREE02.DAT",
+            "03GINF02.DAT",
+            "01TREE03.DAT",
+            "03GINF03.DAT",
+            "01TREE04.DAT",
+            "03GINF04.DAT",
+            "01TREE22.DAT",
+            "03GINF22.DAT",
+            "01TREE2D.DAT",
+            "03GINF2D.DAT",
+            "02TREINF.DAT",
+            "04CNTINF.DAT",
+            "05CIDLST.DAT"
+        ]
+        
+        for f in expectedFiles {
+            let fileURL = omgDir.appendingPathComponent(f)
+            assert(FileManager.default.fileExists(atPath: fileURL.path), "Missing empty DB file: \(f)")
+        }
+        
+        try? FileManager.default.removeItem(at: tempDir)
+        print("Empty OMGAUDIO Database Suite generation PASSED")
+    }
+
+    static func testWalkmanCleaner() {
+        print("Testing Walkman Device Erase & Reset (WalkmanCleaner)...")
+        let tempWalkman = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("CleanerTest_\(UUID().uuidString)")
+        let fm = FileManager.default
+        
+        // Setup mock walkman structure
+        let mp3fm = tempWalkman.appendingPathComponent("MP3FM")
+        let omg = tempWalkman.appendingPathComponent("OMGAUDIO/10F00")
+        let trash = tempWalkman.appendingPathComponent(".Trashes/501")
+        try! fm.createDirectory(at: mp3fm, withIntermediateDirectories: true)
+        try! fm.createDirectory(at: omg, withIntermediateDirectories: true)
+        try! fm.createDirectory(at: trash, withIntermediateDirectories: true)
+        
+        // Authentic key in DvID.DAT
+        let authenticKey: UInt32 = 0x08FF8139
+        let dvidData = WalkmanKeyManager.generateDvidData(key: authenticKey)
+        try! dvidData.write(to: mp3fm.appendingPathComponent("DvID.DAT"))
+        
+        // Dummy OMA files and trash
+        try! Data(count: 1024).write(to: omg.appendingPathComponent("10000001.OMA"))
+        try! Data(count: 2048).write(to: omg.appendingPathComponent("10000002.OMA"))
+        try! Data(count: 512).write(to: trash.appendingPathComponent("deleted.dat"))
+        
+        // Execute clean erase
+        let res = try! WalkmanCleaner.eraseWalkman(at: tempWalkman, force: true)
+        assert(res.tracksDeleted == 2, "Must report 2 tracks deleted")
+        assert(res.keyPreserved == authenticKey, "Must preserve authentic key")
+        assert(res.keyWasAuthentic == true, "Must flag key as authentic")
+        
+        // Verify filesystem state
+        assert(!fm.fileExists(atPath: omg.path), "OMGAUDIO track directories must be wiped")
+        assert(!fm.fileExists(atPath: trash.path), ".Trashes must be wiped")
+        
+        let preservedKey = WalkmanKeyManager.readDeviceKey(from: mp3fm.appendingPathComponent("DvID.DAT"))
+        assert(preservedKey == authenticKey, "DvID.DAT key must match authentic key")
+        
+        // Check clean DB exists
+        assert(fm.fileExists(atPath: tempWalkman.appendingPathComponent("OMGAUDIO/00GTRLST.DAT").path), "Clean database must be generated")
+        
+        try? fm.removeItem(at: tempWalkman)
+        print("Walkman Device Erase & Reset PASSED")
+    }
+
+    static func testWalkmanTrackDumperRoundTrip() {
+        print("Testing Walkman Track Dumper & Descrambler Round-Trip...")
+        let fm = FileManager.default
+        let tempDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("DumperTest_\(UUID().uuidString)")
+        let walkmanDir = tempDir.appendingPathComponent("MockWalkman")
+        let dumpOutDir = tempDir.appendingPathComponent("DumpOutput")
+        
+        let mp3fm = walkmanDir.appendingPathComponent("MP3FM")
+        let omg = walkmanDir.appendingPathComponent("OMGAUDIO/10F00")
+        try! fm.createDirectory(at: mp3fm, withIntermediateDirectories: true)
+        try! fm.createDirectory(at: omg, withIntermediateDirectories: true)
+        
+        let authenticKey: UInt32 = 0x08FF8139
+        let dvidData = WalkmanKeyManager.generateDvidData(key: authenticKey)
+        try! dvidData.write(to: mp3fm.appendingPathComponent("DvID.DAT"))
+        
+        // 1. Create synthetic raw MP3 frames (3 MPEG frames of 418 bytes each)
+        var syntheticMP3 = Data()
+        for i in 0..<3 {
+            var frame = Data([0xFF, 0xFB, 0x90, 0x64]) // MPEG-1 Layer 3 sync header
+            for j in 4..<418 {
+                frame.append(UInt8((i * 10 + j) & 0xFF))
+            }
+            syntheticMP3.append(frame)
+        }
+        
+        let mockMP3File = tempDir.appendingPathComponent("test_track.mp3")
+        try! syntheticMP3.write(to: mockMP3File)
+        
+        // 2. Build encrypted OMA
+        let title = WalkmanDBGenerator.WalkmanTitle(
+            id: 1,
+            titleName: "Sonic Liberty",
+            artistName: "Retro Hacker",
+            albumName: "Silicon Dreams",
+            genre: "Synthwave",
+            length: 120
+        )
+        let omaData = try! OMAContainerBuilder.createEncryptedOMA(
+            title: title,
+            sourceMP3URL: mockMP3File,
+            deviceKey: authenticKey,
+            isVBR: false
+        )
+        try! omaData.write(to: omg.appendingPathComponent("10000001.OMA"))
+        
+        // Generate OMGAUDIO DB suite
+        let dbGen = WalkmanDBGenerator(mp3Bitrate: .kbps192, isVBR: false, isEncrypted3rdGen: true)
+        try! dbGen.generateDatabase(titles: [title], destination: walkmanDir)
+        
+        // 3. Dump & Descramble
+        let result = try! WalkmanTrackDumper.dumpTracks(from: walkmanDir, to: dumpOutDir)
+        assert(result.totalTracksFound == 1, "Must find 1 track")
+        assert(result.tracksDumped == 1, "Must dump 1 track")
+        assert(result.tracksFailed == 0, "Must have 0 failures")
+        
+        // 4. Verify dumped output file
+        let dumpedFile = dumpOutDir.appendingPathComponent("Retro Hacker/Silicon Dreams/01 - Sonic Liberty.mp3")
+        assert(fm.fileExists(atPath: dumpedFile.path), "Dumped MP3 must exist at expected artist/album path: \(dumpedFile.path)")
+        
+        // 5. Extract raw MP3 frames from the dumped MP3 and verify bit-for-bit match!
+        let recoveredRawAudio = try! OMAContainerBuilder.extractRawMP3Audio(from: dumpedFile)
+        assert(recoveredRawAudio == syntheticMP3, "Descrambled raw MP3 audio frames must match original input bit-for-bit!")
+        
+        try? fm.removeItem(at: tempDir)
+        print("Walkman Track Dumper & Descrambler Round-Trip PASSED (Bit-for-bit verified!)")
     }
 }

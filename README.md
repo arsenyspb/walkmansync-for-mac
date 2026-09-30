@@ -5,7 +5,7 @@
 # WalkmanSync for Mac
 
 <p align="center">
-  <img src="img/sony-walkman-sync-for-apple-mac.png" alt="WalkmanSync for Mac Screenshot" width="620" />
+  <img src="img/sony-walkman-sync-for-apple-mac-x86-and-arm.png" alt="WalkmanSync for Mac Screenshot" width="620" />
 </p>
 
 <p align="center">
@@ -120,6 +120,8 @@ WalkmanSync is engineered specifically for Sony's 3rd-generation audio players:
 ## ✨ Cool Things WalkmanSync Does Automatically
 
 - **No More "CANNOT PLAY" Errors**: Previous tools failed on real Walkman hardware because they used fake placeholder keys. WalkmanSync reads your player's authentic factory key directly from the hardware chip so your songs play with 100% crystal-clear sound.
+- **Reverse-Descramble & Library Backup**: Extract existing `.OMA` tracks off the Walkman back onto your Mac as standard, playable `.mp3` files with full ID3 tags (`[ 📥 Dump Tracks to Mac... ]` or `walkmansync --dump <folder>`).
+- **Safe Device Reset & Clean Wipe**: Purchased a used Walkman or want a fresh start? Reset your player to clean `NO DATA` (100% free capacity) while purging hidden macOS `.Trashes` leakages and strictly safeguarding your authentic hardware key (`[ 🗑️ Erase Walkman Music... ]` or `walkmansync --erase`).
 - **Works With Your Music**: Supports regular **MP3**, plus **FLAC**, **M4A (Apple Music/iTunes files)**, and **WAV**.
 - **Live Song Capacity Estimator**: As you switch audio quality settings, WalkmanSync tells you in plain English approximately how many songs will fit on your player (e.g. *~212 songs in high quality*).
 - **Self-Healing Backup**: If you ever format or erase your Walkman, WalkmanSync remembers your player's unique key and automatically restores it the next time you plug it in!
@@ -213,6 +215,12 @@ walkmansync --sync --source ~/Music/MyAlbum --bitrate 128
 
 # Perform a dry-run test without writing to flash
 walkmansync --sync --source ~/Music/MyAlbum --dry-run
+
+# Dump and reverse-descramble all tracks from Walkman to Mac folder
+walkmansync --dump ~/Music/WalkmanBackup
+
+# Safely wipe all tracks and reset OMGAUDIO database (preserves hardware key)
+walkmansync --erase
 
 # Output machine-readable JSON for scripts and agents
 walkmansync --detect --json
