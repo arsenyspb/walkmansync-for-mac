@@ -9,124 +9,172 @@
 </p>
 
 <p align="center">
-  <strong>Native macOS SonicStage alternative for Sony Network Walkman (NW-E400, NW-E500, NW-HD series) with silicon-level hardware cryptographic key extraction, automated 3rd-generation OMGAUDIO database generation, and drag-and-drop music synchronization.</strong>
+  <strong>The easiest, modern way to put music onto your vintage Sony Network Walkman directly from your Mac. No Windows, no virtual machines, no clunky old software.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/arsenyspb/walkmansync-for-mac/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/arsenyspb/walkmansync-for-mac/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI%20Build" alt="CI Build Status" /></a>
-  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases"><img src="https://img.shields.io/github/v/release/arsenyspb/walkmansync-for-mac?style=for-the-badge&logo=apple&logoColor=white&color=007AFF&label=Release%20v0.3.1" alt="Latest Release" /></a>
-  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Apple%20Silicon%20%26%20Intel-black?style=for-the-badge&logo=apple&logoColor=white" alt="Platform macOS" />
-  <img src="https://img.shields.io/badge/Packaging-.DMG%20Installer-green?style=for-the-badge&logo=apple&logoColor=white" alt="DMG Packaging" />
-  <img src="https://img.shields.io/badge/Swift-5.9+-FA7343?style=for-the-badge&logo=swift&logoColor=white" alt="Language Swift" />
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge" alt="License GPLv3" /></a>
-</p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Hardware-Sony%20NW--E400%20%7C%20NW--E500%20%7C%20NW--HD-002F6C?style=for-the-badge&logo=sony&logoColor=white" alt="Hardware Target" />
-  <img src="https://img.shields.io/badge/Protocol-3rd--Gen%20OMGAUDIO%20%7C%20OpenMG-orange?style=for-the-badge" alt="Protocol" />
-  <img src="https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Native)-success?style=for-the-badge" alt="Zero Dependencies" />
+  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases/latest"><img src="https://img.shields.io/badge/Download-WalkmanSync%20.DMG-007AFF?style=for-the-badge&logo=apple&logoColor=white" alt="Download WalkmanSync DMG" /></a>
+  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases"><img src="https://img.shields.io/github/v/release/arsenyspb/walkmansync-for-mac?style=for-the-badge&logo=github&logoColor=white&color=black&label=Version" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%26%20Intel-black?style=for-the-badge&logo=apple&logoColor=white" alt="Platform macOS" />
+  <img src="https://img.shields.io/badge/Setup-Zero%20Config%20(Drag%20%26%20Drop)-success?style=for-the-badge" alt="Zero Config" />
 </p>
 
 ---
 
-## Overview
+## What is WalkmanSync?
 
-**WalkmanSync for Mac** is a standalone, native macOS application and CLI engineered specifically for retro-tech enthusiasts, audiophiles, and indie developers using classic **Sony Network Walkman** devices.
+Did you buy a vintage **Sony Network Walkman** (like the NW-E405 or NW-E507) and want to load your favorite albums onto it from your Mac?
 
-Historically, loading music onto 3rd-generation Sony Walkmans required running deprecated Windows utilities, obsolete versions of Sony's **SonicStage** inside virtual machines, or legacy Java tools like **JSymphonic** that depend on retired JRE versions. Furthermore, modern alternatives consistently caused the dreaded **"CANNOT PLAY"** or **"MG ERROR"** failure on authentic hardware because audio frames must be scrambled with an unforgeable factory cryptographic key burned into the Walkman's internal ASIC chip.
+Back in the 2000s, Sony required an old Windows PC running obsolete software called **SonicStage**. Modern computers cannot run SonicStage, and simply copying MP3 files onto the player's USB drive makes the Walkman say **"CANNOT PLAY"** because Sony Walkmans require a secret factory key built into the player's chip to unlock music.
 
-WalkmanSync solves this entirely on native macOS:
-1. **Direct Hardware Key Extraction**: Interrogates the Walkman's internal silicon register over USB Bulk-Only Transport (`IOUSBHost.framework`), extracting the authentic 16-byte `DvID.DAT` payload and 4-byte hardware key (`0x08FF8139`).
-2. **Automated OMGAUDIO Suite Generation**: Generates the complete 16-table database suite with big-endian UTF-16BE metadata encoding and jog-dial navigation trees.
-3. **Hardware-Accurate Scrambling**: Encrypts MP3/ATRAC frames in-place using Sony's authentic XOR mask formula.
-4. **Standard Drag-and-Drop `.dmg` Distribution**: Zero installation friction on Apple Silicon and Intel Macs.
+**WalkmanSync for Mac** fixes everything! It is a friendly, native Mac app that:
+- Connects directly to your Walkman over USB.
+- Reads your player's real built-in factory key so all your music actually plays with zero errors.
+- Automatically builds the Walkman's internal music menus and artist lists.
+- Works 100% natively on any modern Mac (MacBook Air, MacBook Pro, iMac, Mac mini, Mac Studio).
 
 ---
 
-## The "CANNOT PLAY" Mystery & Silicon Root of Trust
+## 🚀 Easy 1-Minute Installation
 
-During our reverse-engineering of Sony's `CopyTool.exe` and `FrankPACAPI.dll`, we uncovered the architectural reason why previous open-source tools failed on physical hardware:
+You do not need to be a programmer or know terminal commands. Installing WalkmanSync is just like any normal Mac app:
+
+### Step 1: Download the App
+Click the blue download button below to grab the latest official installer:
+
+<p align="center">
+  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases/latest/download/WalkmanSync.dmg">
+    <img src="https://img.shields.io/badge/⬇️_Download_WalkmanSync_for_Mac-(.DMG)-007AFF?style=for-the-badge&logo=apple&logoColor=white" alt="Download WalkmanSync" />
+  </a>
+</p>
+
+*(Or visit [GitHub Releases](https://github.com/arsenyspb/walkmansync-for-mac/releases/latest) to pick `WalkmanSync.dmg`).*
+
+### Step 2: Drag to Applications
+Open the downloaded `WalkmanSync.dmg` file, then drag the **WalkmanSync** icon into your **Applications** folder:
 
 ```text
-track_key = ((0x2465 + track_id * 0x5296E435) & 0xFFFFFFFF) ^ K_hardware
-```
-
-- **Zero-Trust Flash Architecture**: The Walkman's DSP chip **never reads `DvID.DAT` from flash storage during playback**. During playback, the DSP descrambles audio in hardware using its **own burned-in factory key etched into internal ASIC ROM/EEPROM**.
-- **The Role of `DvID.DAT`**: `/Volumes/WALKMAN/MP3FM/DvID.DAT` is strictly an *interchange file* created by Sony's PC tools so the transfer program knows which key to scramble with.
-- **Why Placeholders Fail**: If audio is scrambled using placeholder keys (`0x08DA6D03`), the DSP descrambles invalid MPEG frame headers (`0xFFFB`) and instantly halts playback with **"CANNOT PLAY"**.
-- **The Solution**: WalkmanSync extracts the authentic key directly from the ASIC over USB, writes `/Volumes/WALKMAN/MP3FM/DvID.DAT`, and permanently caches it in `~/Library/Application Support/WalkmanSync/`. Audio playback on physical hardware succeeds with **100% audio fidelity**.
-
----
-
-## Key Features
-
-- **Native Silicon Key Extraction (1-Click Elevation)**:
-  - Bypasses macOS kernel storage locks via `IOUSBHost.framework` (`IOUSBHostObjectInitOptionsDeviceCapture`).
-  - Single-click **"🔑 Extract"** button in GUI prompts standard macOS Touch ID / Password dialog.
-  - Headless CLI extraction via `walkmansync --extract-key`.
-- **Automatic Self-Healing & Multi-Device Profiles**:
-  - Permanently caches keys in `~/Library/Application Support/WalkmanSync/DvID.DAT` and `DvID_<KEY>.DAT`.
-  - If the Walkman is ever formatted via macOS Disk Utility or the player's internal settings menu, WalkmanSync **automatically detects the erased drive and restores the authentic key** with zero prompts.
-  - Supports multiple Walkmans independently without key collisions.
-- **Complete OMGAUDIO Database Suite (16 DAT Tables)**:
-  - Generates `00GTRLST`, `01TREE01`–`04`, `01TREE22`, `01TREE2D` (jog-dial navigation), `02TREINF`, `03GINF01`–`04`, `03GINF22`, `03GINF2D`, `04CNTINF`, and `05CIDLST`.
-  - Formats all artist, album, and track strings in big-endian UTF-16BE.
-- **Selectable Audio Codecs (ATRAC3 & MP3)**:
-  - **ATRAC3 LP2 (132 kbps)**: Sony's native hardware audio format (~212 songs on 512 MB).
-  - **ATRAC3 LP4 (66 kbps)**: High-efficiency mode (~383 songs on 512 MB).
-  - **ATRAC3plus (256 kbps)**: Studio quality playback.
-  - **MP3 (320 kbps CBR)**: Universal MP3 audio with hardware-accurate XOR payload scrambling.
-- **Dynamic Song Capacity Estimator**:
-  - Live capacity forecasting displayed in GUI and CLI (`walkmansync --detect`).
-  - Recalculates remaining song estimates across all formats in real time.
-- **Universal Audio Ingest**:
-  - Ingests **MP3, FLAC, M4A (AAC/ALAC), WAV, AIFF, and OGG**, automatically converting and preparing containers on-the-fly.
-- **Proactive System Health Doctor**:
-  - Audits FFmpeg, bundled `atracdenc`, Walkman USB connection, and key authenticity (`walkmansync --doctor` or GUI **"🩺 Doctor..."** modal).
-- **Auto-Update Self-Check**:
-  - Asynchronously queries GitHub Releases for newer builds and presents a notification badge with direct download links.
-
----
-
-## Dependencies & Audio Encoders
-
-| Feature / Workflow | Required Tools | Status |
-|---|---|---|
-| **Direct MP3 Sync (Standard `.mp3` files)** | None | **100% Zero Dependencies** (Built-in pure Swift) |
-| **ATRAC3 / ATRAC3plus Encoding** | `atracdenc` + `ffmpeg` | `atracdenc` is **Pre-Bundled**; `ffmpeg` via Homebrew |
-| **Non-MP3 Ingest (FLAC, M4A, WAV, AIFF, OGG)** | `ffmpeg` | `brew install ffmpeg` |
-| **Hardware Key Extraction & OMGAUDIO DB** | None | **Pure Native macOS (IOKit & IOUSBHost)** |
-
-### Optional: Installing FFmpeg
-If you plan to encode into Sony's native **ATRAC3** format or transfer lossless **FLAC / M4A** files:
-```bash
-brew install ffmpeg
-```
-*(Tip: If your library is already in standard `.mp3` format, selecting **MP3 (320 kbps CBR)** requires zero external tools!)*
-
----
-
-## Installation & Distribution (.DMG)
-
-### Option 1: Official Drag-and-Drop DMG (Recommended)
-Download the latest `.dmg` installer from [GitHub Releases](https://github.com/arsenyspb/walkmansync-for-mac/releases):
-1. Download **`WalkmanSync-0.3.1.dmg`**.
-2. Open the disk image.
-3. Drag **WalkmanSync.app** into the **Applications** folder.
-4. Launch WalkmanSync from Launchpad or Spotlight.
-
-```
 +-----------------------------------------------------+
 |                     WalkmanSync                     |
 |                                                     |
 |       [ WalkmanSync.app ]   --->   [ Applications ] |
 |                                                     |
-|       Drag WalkmanSync to Applications to install   |
+|          Drag WalkmanSync into Applications         |
 +-----------------------------------------------------+
 ```
 
-### Option 2: Build From Source
-Building requires macOS 12.0+ with Xcode Command Line Tools:
+### Step 3: Open WalkmanSync
+Open your **Applications** folder (or press `Cmd + Space` and search for *WalkmanSync*) and launch it!
+
+---
+
+## 🎵 How to Put Songs on Your Walkman (Quick Start)
+
+### 1. Plug In Your Walkman
+Connect your Sony Walkman to your Mac with its USB cable. The screen on your Walkman will light up and display **`USB CONNECT`**.
+
+### 2. Launch WalkmanSync
+WalkmanSync will immediately detect your player and show its name and available storage space.
+
+### 3. First-Time Setup: Click "🔑 Extract"
+If this is the first time you are using this Walkman on your Mac (or if you recently erased it):
+- You will see a small button that says **`🔑 Extract`**.
+- Click it! Your Mac will ask for your password or Touch ID.
+- *Why does it ask?* Sony built a private cryptographic key into the Walkman's internal chip. Giving permission lets WalkmanSync fetch this key directly from the chip once and save it permanently on your Mac. You only ever need to do this once!
+- The button will turn into a green **`🔑 Key ✓`**.
+
+### 4. Pick Your Music Folder
+Click the **"Select"** button next to **Music Source** and pick the folder on your Mac that contains your music files (MP3s, FLAC, M4A, etc.).
+
+### 5. Click "Sync to Walkman"
+Click the big **"Sync to Walkman"** button at the bottom! WalkmanSync will copy your songs, build the Walkman's database, and scramble the audio with your player's real key.
+
+When it says **"Sync Complete"**, you're done! Unplug your Walkman, plug in your headphones, and enjoy your music!
+
+---
+
+## 🎧 Supported Sony Walkman Models
+
+WalkmanSync is engineered specifically for Sony's 3rd-generation audio players:
+
+| Model Series | Common Devices | How Music is Stored |
+|---|---|---|
+| **NW-E400 Series** | **NW-E403** (256 MB), **NW-E405** (512 MB), **NW-E407** (1 GB) | Built-in Flash Memory |
+| **NW-E500 Series** | **NW-E503**, **NW-E505**, **NW-E507** (FM Radio models) | Built-in Flash Memory |
+| **NW-HD Series** | **NW-HD1**, **NW-HD3**, **NW-HD5** | Internal Mini Hard Drive |
+| **NW-A Series** | **NW-A608**, **NW-A1000**, **NW-A3000** | Flash / Hard Drive |
+
+---
+
+## ✨ Cool Things WalkmanSync Does Automatically
+
+- **No More "CANNOT PLAY" Errors**: Previous tools failed on real Walkman hardware because they used fake placeholder keys. WalkmanSync reads your player's authentic factory key directly from the hardware chip so your songs play with 100% crystal-clear sound.
+- **Works With Your Music**: Supports regular **MP3**, plus **FLAC**, **M4A (Apple Music/iTunes files)**, and **WAV**.
+- **Live Song Capacity Estimator**: As you switch audio quality settings, WalkmanSync tells you in plain English approximately how many songs will fit on your player (e.g. *~212 songs in high quality*).
+- **Self-Healing Backup**: If you ever format or erase your Walkman, WalkmanSync remembers your player's unique key and automatically restores it the next time you plug it in!
+- **Automatic Update Alerts**: WalkmanSync checks GitHub quietly in the background and shows a little badge when an update is available so you can update in one click.
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+#### *Q: Why does my Mac ask for my administrator password when I click "Extract"?*
+**A:** macOS is designed to protect your USB devices from unauthorized software. Because the Walkman stores its playback key deep inside its hardware silicon chip, macOS requires your permission once to let WalkmanSync temporarily communicate with the chip and retrieve your key. Once extracted, it is cached permanently on your Mac so you don't have to enter your password again.
+
+#### *Q: Do I need to install any extra software to sync MP3 files?*
+**A:** **No!** If you have normal `.mp3` files, WalkmanSync has **100% zero external dependencies**. It works completely out of the box.
+
+#### *Q: What if I have FLAC or Apple M4A music files?*
+**A:** To convert lossless FLAC or M4A files on the fly, WalkmanSync can use the standard free Mac audio tool `ffmpeg`. You can install it in 10 seconds using Homebrew by typing `brew install ffmpeg` in Terminal, or simply click the **"🩺 Doctor..."** button inside WalkmanSync to check if your Mac is ready!
+
+#### *Q: How do I check if my Walkman is connected properly?*
+**A:** Click the **"🩺 Doctor..."** button at the bottom of the WalkmanSync window anytime. It will show you a friendly checklist verifying your Walkman connection, storage space, and audio tools.
+
+#### *Q: Can I manage multiple different Walkmans?*
+**A:** **Yes!** If you own more than one Walkman (for example, an NW-E405 and an NW-HD5), WalkmanSync automatically remembers each device's key independently so you can switch between them seamlessly.
+
+---
+
+<details>
+<summary><b>🛠️ For Developers & Terminal Users (Click to Expand)</b></summary>
+
+### Command-Line Interface (CLI)
+
+WalkmanSync includes a full-featured CLI for terminal users and automation scripts:
+
+```bash
+# Check system health, dependencies, and hardware key
+walkmansync --doctor
+
+# Detect connected Walkmans and view live capacity estimates
+walkmansync --detect
+
+# Extract authentic hardware key from connected Walkman
+walkmansync --extract-key
+
+# Check GitHub for newer releases
+walkmansync --check-update
+
+# Scan a local folder to inspect track metadata
+walkmansync --scan ~/Music/MyAlbum
+
+# Sync music to Walkman with ATRAC3 LP2 (Default)
+walkmansync --sync --source ~/Music/MyAlbum
+
+# Sync music with MP3 320k CBR encoding
+walkmansync --sync --source ~/Music/MyAlbum --codec mp3
+
+# Perform a dry-run test without writing to flash
+walkmansync --sync --source ~/Music/MyAlbum --dry-run
+
+# Output machine-readable JSON for scripts and agents
+walkmansync --detect --json
+walkmansync --doctor --json
+```
+
+### Building From Source
+
+Requires macOS 12.0+ with Xcode Command Line Tools installed:
 
 ```bash
 # Clone the repository
@@ -136,84 +184,23 @@ cd walkmansync-for-mac
 # Run the 8-suite test suite
 make test
 
-# Build the standard DMG package
+# Build WalkmanSync.app and create the DMG installer
 make dmg
 
 # Launch the app
 make run
 ```
 
----
+### Technical Documentation & Architecture
+- **[Reverse-Engineering Sony's CopyTool.exe & Hardware Key Extraction Saga](CopyTool.exe.DvID.dat.md)**: Disassembly analysis, proprietary SCSI CDB sequences (`A4 00 ... BC ... 3F`), and the native `IOUSBHost.framework` `DeviceCapture` kernel bypass.
+- **[AI Agent Development & Architecture Instructions](AI.md)**: Developer documentation and protocol specifications for coding agents.
 
-## How to Use
-
-### Graphic User Interface (GUI)
-1. **Connect your Sony Walkman** to your Mac via USB. The player will mount as a mass-storage drive (`/Volumes/WALKMAN`).
-2. **Launch WalkmanSync**. The app will detect the connected player automatically.
-3. **One-Time Key Extraction (First Run or New Walkman)**:
-   - If the player is uninitialized or uses a placeholder key, the status bar displays `• Key: Placeholder ⚠️` and the button shows **"🔑 Extract"**.
-   - Click **"🔑 Extract"** and enter your macOS administrator password. WalkmanSync will seize the USB interface, extract the authentic factory key, and permanently cache it.
-4. Click **"Select"** under **Music Source** to pick your local folder of music files.
-5. Select your target **Audio Codec** (e.g. *ATRAC3 LP2* or *MP3*).
-6. Click **"Sync to Walkman"**.
-
-### Command-Line Interface (CLI)
-
-WalkmanSync includes a transparent command-line interface:
-
-```bash
-# Inspect system health, audio encoders, and hardware key
-walkmansync --doctor
-
-# Detect mounted Walkman devices and song capacity estimates
-walkmansync --detect
-
-# Extract authentic hardware key from connected Walkman (JSON supported)
-walkmansync --extract-key
-
-# Check GitHub for newer WalkmanSync releases
-walkmansync --check-update
-
-# Scan a local folder to inspect track metadata and formats
-walkmansync --scan ~/Music/Album
-
-# Sync music library to Walkman using ATRAC3 LP2 (Default)
-walkmansync --sync --source ~/Music/Album
-
-# Sync music library with 320k CBR MP3 encoding
-walkmansync --sync --source ~/Music/Album --codec mp3
-
-# Perform a dry run without writing to flash
-walkmansync --sync --source ~/Music/Album --dry-run
-
-# Output machine-readable JSON for scripting and agent automation
-walkmansync --detect --json
-walkmansync --doctor --json
-```
-
----
-
-## Supported Hardware
-
-| Series | Models | Generation | Database Format |
-|---|---|---|---|
-| **NW-E400 Series** | NW-E403 (256 MB), **NW-E405** (512 MB), NW-E407 (1 GB) | 3rd Gen Flash | OMGAUDIO / OpenMG XOR |
-| **NW-E500 Series** | NW-E503, NW-E505, NW-E507 | 3rd Gen Flash | OMGAUDIO / OpenMG XOR |
-| **NW-HD Series** | NW-HD1, NW-HD3, NW-HD5 | 3rd/4th Gen HDD | OMGAUDIO |
-| **NW-A Series** | NW-A600, NW-A1000, NW-A3000 | 3rd/4th Gen | OMGAUDIO |
-
----
-
-## Technical Documentation & Research
-
-For deep-dive reverse-engineering reports, disassembly analyses, SCSI command specifications, and architectural Mermaid diagrams of the macOS kernel bypass:
-- **[Reverse-Engineering Sony's CopyTool.exe & Hardware Key Extraction Saga](CopyTool.exe.DvID.dat.md)**
-- **[AI Agent Development & Architecture Instructions](AI.md)**
+</details>
 
 ---
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. See [LICENSE](LICENSE) for details.
+This project is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. See [LICENSE](LICENSE) for details.
 
-*Sony, Walkman, ATRAC, ATRAC3, ATRAC3plus, SonicStage, and OpenMG are trademarks or registered trademarks of Sony Corporation. This project is an independent, clean-room open-source initiative developed for hardware preservation and retro-computing compatibility.*
+*Sony, Walkman, ATRAC, ATRAC3, ATRAC3plus, SonicStage, and OpenMG are trademarks or registered trademarks of Sony Corporation. This project is an independent, clean-room open-source initiative created for hardware preservation and retro-computing compatibility.*
