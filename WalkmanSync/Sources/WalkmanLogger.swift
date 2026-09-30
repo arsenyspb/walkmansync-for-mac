@@ -11,6 +11,13 @@ public class WalkmanLogger {
     
     public static var silenceStdout: Bool = false
     
+    private static let dateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+    
     private init() {
         let libraryLogs = fileManager.urls(for: .libraryDirectory, in: .userDomainMask).first!
             .appendingPathComponent("Logs", isDirectory: true)
@@ -35,7 +42,7 @@ public class WalkmanLogger {
     }
     
     public func log(_ message: String, level: String = "INFO") {
-        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let timestamp = WalkmanLogger.dateFormatter.string(from: Date())
         let line = "[\(timestamp)] [\(level)] \(message)\n"
         if !WalkmanLogger.silenceStdout {
             print(line, terminator: "")
