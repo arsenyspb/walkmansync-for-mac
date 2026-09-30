@@ -33,6 +33,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     var sourceUrl: URL?
     var walkmanUrl: URL?
+    var scannedTracks: [WalkmanDBGenerator.WalkmanTitle] = []
     var deviceDetectionTimer: Timer?
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
@@ -126,33 +127,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // --- Storage Capacity ---
         let storageTitle = NSTextField(labelWithString: "Storage Space:")
         storageTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        storageTitle.frame = NSMakeRect(20, 230, 115, 20)
+        storageTitle.frame = NSMakeRect(20, 225, 115, 20)
         contentView.addSubview(storageTitle)
         
         storageLabel = NSTextField(labelWithString: "")
         storageLabel.font = NSFont.systemFont(ofSize: 11)
         storageLabel.textColor = .secondaryLabelColor
-        storageLabel.frame = NSMakeRect(140, 230, 380, 18)
+        storageLabel.frame = NSMakeRect(140, 225, 380, 18)
         contentView.addSubview(storageLabel)
-        
-        // --- Song Capacity Estimates ---
-        let capacityTitle = NSTextField(labelWithString: "Song Capacity:")
-        capacityTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        capacityTitle.frame = NSMakeRect(20, 192, 115, 20)
-        contentView.addSubview(capacityTitle)
-        
-        capacityLabel = NSTextField(wrappingLabelWithString: "")
-        capacityLabel.font = NSFont.systemFont(ofSize: 11)
-        capacityLabel.frame = NSMakeRect(140, 175, 380, 38)
-        contentView.addSubview(capacityLabel)
         
         // --- Audio Quality Selection ---
         let codecTitle = NSTextField(labelWithString: "MP3 Quality:")
         codecTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        codecTitle.frame = NSMakeRect(20, 135, 115, 20)
+        codecTitle.frame = NSMakeRect(20, 188, 115, 20)
         contentView.addSubview(codecTitle)
         
-        bitratePopUp = NSPopUpButton(frame: NSMakeRect(138, 130, 245, 28), pullsDown: false)
+        bitratePopUp = NSPopUpButton(frame: NSMakeRect(138, 183, 245, 28), pullsDown: false)
         for rate in WalkmanDBGenerator.MP3Bitrate.allCases {
             bitratePopUp.addItem(withTitle: rate.displayName)
         }
@@ -161,21 +151,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         contentView.addSubview(bitratePopUp)
         
         vbrCheckbox = NSButton(checkboxWithTitle: "Use VBR", target: self, action: #selector(qualityChanged))
-        vbrCheckbox.frame = NSMakeRect(395, 133, 125, 22)
+        vbrCheckbox.frame = NSMakeRect(395, 186, 125, 22)
         vbrCheckbox.toolTip = "Variable Bit Rate: Dynamically adapts bitrate while capping at the selected ceiling."
         contentView.addSubview(vbrCheckbox)
+        
+        // --- Song Capacity Estimates / Storage Fit Calculator ---
+        let capacityTitle = NSTextField(labelWithString: "Song Capacity:")
+        capacityTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        capacityTitle.frame = NSMakeRect(20, 145, 115, 20)
+        contentView.addSubview(capacityTitle)
+        
+        capacityLabel = NSTextField(wrappingLabelWithString: "")
+        capacityLabel.font = NSFont.systemFont(ofSize: 11)
+        capacityLabel.frame = NSMakeRect(140, 128, 380, 38)
+        contentView.addSubview(capacityLabel)
         
         // --- Dependency / Engine Status ---
         dependencyLabel = NSTextField(labelWithString: "")
         dependencyLabel.font = NSFont.systemFont(ofSize: 11)
-        dependencyLabel.frame = NSMakeRect(140, 106, 380, 18)
+        dependencyLabel.frame = NSMakeRect(140, 104, 380, 18)
         contentView.addSubview(dependencyLabel)
         
         // --- Status & Logs ---
         statusLabel = NSTextField(labelWithString: "Ready")
         statusLabel.alignment = .center
         statusLabel.textColor = .secondaryLabelColor
-        statusLabel.frame = NSMakeRect(20, 75, 500, 20)
+        statusLabel.frame = NSMakeRect(20, 72, 500, 20)
         contentView.addSubview(statusLabel)
         
         // --- Doctor Button ---
@@ -272,11 +273,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func updateStorageDisplay() {
+        let isVBR = vbrCheckbox?.state == .on
+        let selectedIndex = bitratePopUp?.indexOfSelectedItem ?? 0
+        let selectedBitrate: WalkmanDBGenerator.MP3Bitrate
+        if selectedIndex >= 0 && selectedIndex < WalkmanDBGenerator.MP3Bitrate.allCases.count {
+            selectedBitrate = WalkmanDBGenerator.MP3Bitrate.allCases[selectedIndex]
+        } else {
+            selectedBitrate = .kbps192
+        }
+        let modeLabel = isVBR ? "\(selectedBitrate.rawValue) kbps VBR (Adaptive with \(selectedBitrate.rawValue)k cap)" : "\(selectedBitrate.rawValue) kbps CBR"
+        
         guard let vol = walkmanUrl else {
             storageLabel?.stringValue = ""
-            capacityLabel?.stringValue = ""
+            if !scannedTracks.isEmpty {
+                let reqBytes = estimateRequiredBytes(for: scannedTracks, bitrate: selectedBitrate, isVBR: isVBR)
+                let reqMB = Double(reqBytes) / (1024 * 1024)
+                let attr = NSMutableAttributedString()
+                attr.append(NSAttributedString(string: "Selected: \(scannedTracks.count) tracks require ~\(String(format: "%.1f", reqMB)) MB (\(modeLabel))\n", attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: NSColor.labelColor
+                ]))
+                attr.append(NSAttributedString(string: "Connect Walkman via USB to check available storage capacity.", attributes: [
+                    .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ]))
+                capacityLabel?.attributedStringValue = attr
+            } else {
+                capacityLabel?.stringValue = ""
+            }
             return
         }
+        
         let attrs = try? FileManager.default.attributesOfFileSystem(forPath: vol.path)
         let freeBytes = attrs?[.systemFreeSize] as? Int64 ?? 0
         let totalBytes = attrs?[.systemSize] as? Int64 ?? 0
@@ -299,38 +326,88 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             extractKeyBtn?.toolTip = "Click to extract authentic factory encryption key from Walkman hardware."
         }
         
-        let isVBR = vbrCheckbox?.state == .on
-        let selectedIndex = bitratePopUp?.indexOfSelectedItem ?? 0
-        let selectedBitrate: WalkmanDBGenerator.MP3Bitrate
-        if selectedIndex >= 0 && selectedIndex < WalkmanDBGenerator.MP3Bitrate.allCases.count {
-            selectedBitrate = WalkmanDBGenerator.MP3Bitrate.allCases[selectedIndex]
+        let attr = NSMutableAttributedString()
+        
+        if !scannedTracks.isEmpty {
+            // Quick Calculator mode: exact file count and storage fit known
+            let reqBytes = estimateRequiredBytes(for: scannedTracks, bitrate: selectedBitrate, isVBR: isVBR)
+            let reqMB = Double(reqBytes) / (1024 * 1024)
+            let freeMBDbl = Double(freeBytes) / (1024 * 1024)
+            let fits = reqBytes <= freeBytes
+            
+            if fits {
+                let remainingMB = freeMBDbl - reqMB
+                let primaryStr = "✓ Fits on Walkman! Needs ~\(String(format: "%.1f", reqMB)) MB (\(String(format: "%.1f", remainingMB)) MB free after sync)\n"
+                attr.append(NSAttributedString(string: primaryStr, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: NSColor.systemGreen
+                ]))
+                let subStr = "\(scannedTracks.count) tracks at \(modeLabel) • \(freeMB) MB currently available"
+                attr.append(NSAttributedString(string: subStr, attributes: [
+                    .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ]))
+            } else {
+                let deficitMB = reqMB - freeMBDbl
+                let primaryStr = "⚠️ Will not fit! Needs ~\(String(format: "%.1f", reqMB)) MB (\(String(format: "%.1f", deficitMB)) MB over capacity)\n"
+                attr.append(NSAttributedString(string: primaryStr, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: NSColor.systemRed
+                ]))
+                let subStr = isVBR ? "Try selecting a lower bitrate (e.g. 128 kbps or 96 kbps) to reduce size." : "Tip: Check 'Use VBR' or choose a lower bitrate (128k / 96k) to fit."
+                attr.append(NSAttributedString(string: subStr, attributes: [
+                    .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ]))
+            }
         } else {
-            selectedBitrate = .kbps192
+            // Default approximation mode (no folder selected)
+            let mbPerSong = isVBR ? (selectedBitrate.averageMbPerSong * 0.8) : selectedBitrate.averageMbPerSong
+            let songEstimate = max(0, Int(Double(freeMB) / mbPerSong))
+            
+            let primaryStr = "~\(songEstimate) songs at \(modeLabel)\n"
+            attr.append(NSAttributedString(string: primaryStr, attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                .foregroundColor: NSColor.labelColor
+            ]))
+            
+            let c320 = Int(Double(freeMB) / 7.5)
+            let c256 = Int(Double(freeMB) / 6.0)
+            let c192 = Int(Double(freeMB) / 4.5)
+            let c128 = Int(Double(freeMB) / 3.0)
+            let c96 = Int(Double(freeMB) / 2.2)
+            let comparisonStr = "All: ~\(c320) (320k) • ~\(c256) (256k) • ~\(c192) (192k) • ~\(c128) (128k) • ~\(c96) (96k)"
+            attr.append(NSAttributedString(string: comparisonStr, attributes: [
+                .font: NSFont.systemFont(ofSize: 10, weight: .regular),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]))
         }
         
-        let mbPerSong = isVBR ? (selectedBitrate.averageMbPerSong * 0.8) : selectedBitrate.averageMbPerSong
-        let songEstimate = max(0, Int(Double(freeMB) / mbPerSong))
-        
-        let modeLabel = isVBR ? "\(selectedBitrate.rawValue) kbps VBR (Adaptive with \(selectedBitrate.rawValue)k cap)" : "\(selectedBitrate.rawValue) kbps CBR"
-        let attr = NSMutableAttributedString()
-        let primaryStr = "~\(songEstimate) songs at \(modeLabel)\n"
-        attr.append(NSAttributedString(string: primaryStr, attributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: NSColor.labelColor
-        ]))
-        
-        let c320 = Int(Double(freeMB) / 7.5)
-        let c256 = Int(Double(freeMB) / 6.0)
-        let c192 = Int(Double(freeMB) / 4.5)
-        let c128 = Int(Double(freeMB) / 3.0)
-        let c96 = Int(Double(freeMB) / 2.2)
-        let comparisonStr = "All: ~\(c320) (320k) • ~\(c256) (256k) • ~\(c192) (192k) • ~\(c128) (128k) • ~\(c96) (96k)"
-        attr.append(NSAttributedString(string: comparisonStr, attributes: [
-            .font: NSFont.systemFont(ofSize: 10, weight: .regular),
-            .foregroundColor: NSColor.secondaryLabelColor
-        ]))
-        
         capacityLabel?.attributedStringValue = attr
+    }
+    
+    private func estimateRequiredBytes(for tracks: [WalkmanDBGenerator.WalkmanTitle], bitrate: WalkmanDBGenerator.MP3Bitrate, isVBR: Bool) -> Int64 {
+        var total: Int64 = 0
+        let bytesPerSec = Int64((bitrate.kbps * 1000) / 8)
+        
+        for track in tracks {
+            if let orig = track.originalFile, orig.pathExtension.lowercased() == "mp3" {
+                // Direct passthrough: uses existing MP3 size plus EA3 container tags
+                if let res = try? orig.resourceValues(forKeys: [.fileSizeKey]), let sz = res.fileSize {
+                    total += Int64(sz) + 3168
+                } else {
+                    let raw = Int64(track.length) * bytesPerSec
+                    total += (isVBR ? Int64(Double(raw) * 0.8) : raw) + 3168
+                }
+            } else {
+                // Non-MP3 (FLAC/M4A/WAV) will be transcoded to MP3
+                let raw = Int64(track.length) * bytesPerSec
+                let est = isVBR ? Int64(Double(raw) * 0.8) : raw
+                total += est + 3168
+            }
+        }
+        total += 65536 // 64 KB overhead for OMGAUDIO database tables
+        return total
     }
     
     @objc func selectSource() {
@@ -342,8 +419,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.runModal() == .OK {
             sourceUrl = panel.url
             if let url = sourceUrl {
-                let tracks = SyncEngine.scanForMusic(in: url)
-                let count = tracks.count
+                scannedTracks = SyncEngine.scanForMusic(in: url)
+                let count = scannedTracks.count
                 if count > 0 {
                     sourcePathLabel?.stringValue = "\(url.lastPathComponent) (\(count) track\(count == 1 ? "" : "s"))"
                     sourcePathLabel?.textColor = .labelColor
@@ -353,7 +430,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     sourcePathLabel?.textColor = .systemRed
                     statusLabel?.stringValue = "No supported audio files (MP3, FLAC, M4A) found."
                 }
+            } else {
+                scannedTracks = []
             }
+            updateStorageDisplay()
             updateSyncButton()
         }
     }
@@ -644,7 +724,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 // 1. Scan for Music and Read ID3 Tags
-                let titles = SyncEngine.scanForMusic(in: source)
+                let titles = !self.scannedTracks.isEmpty ? self.scannedTracks : SyncEngine.scanForMusic(in: source)
                 guard !titles.isEmpty else {
                     WalkmanLogger.warn("No audio files found in: \(source.path)")
                     DispatchQueue.main.async {

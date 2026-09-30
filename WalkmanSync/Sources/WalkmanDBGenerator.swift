@@ -29,6 +29,10 @@ public class WalkmanDBGenerator {
         case kbps128 = "128" // Standard / Matches ATRAC3 LP2
         case kbps96  = "96"  // Compact / Maximum Capacity
         
+        public var kbps: Int {
+            return Int(self.rawValue) ?? 192
+        }
+        
         public var displayName: String {
             switch self {
             case .kbps192: return "192 kbps (High Quality - Recommended)"

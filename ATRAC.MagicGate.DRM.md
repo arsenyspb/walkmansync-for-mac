@@ -114,9 +114,13 @@ To prevent users from having to authenticate with Sony's central OpenMG servers,
 1. **No External Certificates**: The device requires no `30GRCT/` directory, no `0001001D.DAT`, and Table 5 (`05CIDLST.DAT`) is filled with empty zeros.
 2. **Silicon-Level Device Key**: Every Walkman has a 4-byte factory cryptographic key burned into its internal ASIC ROM/EEPROM (e.g. `0x08FF8139`).
 3. **8-Byte XOR Stream Cipher**:
-   $$\text{track\_key} = \Big(\big(0\text{x}2465 + \text{track\_id} \times 0\text{x}5296\text{E}435\big) \ \& \ 0\text{xFFFFFFFF}\Big) \oplus K_{\text{hardware}}$$
-   This key is repeated to form an 8-byte XOR mask:
-   $$\text{mask} = [\text{key}_0, \text{key}_1, \text{key}_2, \text{key}_3, \text{key}_0, \text{key}_1, \text{key}_2, \text{key}_3]$$
+   ```
+   track_key = (((0x2465 + track_id * 0x5296E435) & 0xFFFFFFFF) ^ hardware_key)
+   ```
+   This 4-byte key is repeated to form an 8-byte XOR mask:
+   ```
+   mask = [key0, key1, key2, key3, key0, key1, key2, key3]
+   ```
    The mask is applied in-place to the raw MPEG audio frames.
 4. **Protection Marker `0xFFFE`**: Marked in the EA3 audio header and `04CNTINF.DAT`.
 
