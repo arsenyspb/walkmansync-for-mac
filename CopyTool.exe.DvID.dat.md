@@ -12,7 +12,9 @@ Sony 3rd-generation Network Walkman devices (NW-E400, NW-E500, NW-A, and NW-HD s
 ### The Root Cause: Hardware-Bound XOR Scrambling
 Audio frames on the device must be XOR-scrambled with a 4-byte key derived from the track ID and a player-unique device key:
 
-$$\text{track\_key} = ((0\text{x}2465 + \text{track\_id} \times 0\text{x}5296\text{E}435) \ \& \ 0\text{xFFFFFFFF}) \oplus \mathbf{K_{\text{hardware}}}$$
+```text
+track_key = ((0x2465 + track_id * 0x5296E435) & 0xFFFFFFFF) ^ K_hardware
+```
 
 1. **Hardware-Bound Decryption**: The Walkman's DSP chip unscrambles MP3 frames using an authentic factory cryptographic key burned into its internal ASIC ROM/EEPROM during manufacturing.
 2. **Flash Independence**: The physical player **never reads `DvID.DAT` from flash memory during playback**. The DSP chip only checks its internal hardware register.

@@ -47,7 +47,9 @@ WalkmanSync solves this entirely on native macOS:
 
 During our reverse-engineering of Sony's `CopyTool.exe` and `FrankPACAPI.dll`, we uncovered the architectural reason why previous open-source tools failed on physical hardware:
 
-$$\text{track\_key} = ((0\text{x}2465 + \text{track\_id} \times 0\text{x}5296\text{E}435) \ \& \ 0\text{xFFFFFFFF}) \oplus \mathbf{K_{\text{hardware}}}$$
+```text
+track_key = ((0x2465 + track_id * 0x5296E435) & 0xFFFFFFFF) ^ K_hardware
+```
 
 - **Zero-Trust Flash Architecture**: The Walkman's DSP chip **never reads `DvID.DAT` from flash storage during playback**. During playback, the DSP descrambles audio in hardware using its **own burned-in factory key etched into internal ASIC ROM/EEPROM**.
 - **The Role of `DvID.DAT`**: `/Volumes/WALKMAN/MP3FM/DvID.DAT` is strictly an *interchange file* created by Sony's PC tools so the transfer program knows which key to scramble with.
