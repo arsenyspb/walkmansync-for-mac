@@ -22,13 +22,21 @@ dmg: $(APP_DIR)
 	@rm -rf $(DMG_STAGING)
 	@echo "DMG Created successfully: $(DMG_NAME) (also symlinked as $(APP_NAME).dmg)"
 
+TARGET_MACOS = 13.0
+
 $(APP_DIR): $(SWIFT_FILES) Info.plist
-	@echo "Building $(APP_NAME)..."
+	@echo "Building Universal 2 binary for $(APP_NAME) (Apple Silicon & Intel, macOS $(TARGET_MACOS)+)..."
 	@mkdir -p $(MACOS_DIR)
 	@mkdir -p $(RESOURCES_DIR)
 	@cp Info.plist $(APP_DIR)/Contents/
 	@cp -R Resources/* $(RESOURCES_DIR)/ 2>/dev/null || true
-	@swiftc -parse-as-library -O -whole-module-optimization $(SWIFT_FILES) -o $(MACOS_DIR)/$(APP_NAME)
+	@echo "  -> Compiling arm64 slice..."
+	@swiftc -parse-as-library -O -whole-module-optimization -target arm64-apple-macos$(TARGET_MACOS) $(SWIFT_FILES) -o /tmp/$(APP_NAME)_arm64
+	@echo "  -> Compiling x86_64 slice..."
+	@swiftc -parse-as-library -O -whole-module-optimization -target x86_64-apple-macos$(TARGET_MACOS) $(SWIFT_FILES) -o /tmp/$(APP_NAME)_x86_64
+	@echo "  -> Creating Universal 2 binary..."
+	@lipo -create /tmp/$(APP_NAME)_arm64 /tmp/$(APP_NAME)_x86_64 -output $(MACOS_DIR)/$(APP_NAME)
+	@rm -f /tmp/$(APP_NAME)_arm64 /tmp/$(APP_NAME)_x86_64
 	@codesign --force --deep --sign - $(APP_DIR)
 	@echo "Build complete. Output: $(APP_DIR)"
 
@@ -50,7 +58,7 @@ Info.plist:
 	@echo '    <key>CFBundleShortVersionString</key>' >> Info.plist
 	@echo '    <string>$(VERSION)</string>' >> Info.plist
 	@echo '    <key>LSMinimumSystemVersion</key>' >> Info.plist
-	@echo '    <string>10.15</string>' >> Info.plist
+	@echo '    <string>$(TARGET_MACOS)</string>' >> Info.plist
 	@echo '    <key>NSPrincipalClass</key>' >> Info.plist
 	@echo '    <string>NSApplication</string>' >> Info.plist
 	@echo '</dict>' >> Info.plist
