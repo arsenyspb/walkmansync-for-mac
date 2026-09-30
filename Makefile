@@ -20,6 +20,7 @@ test:
 		Tests/TestRunner.swift \
 		-o bin/test_runner
 	@./bin/test_runner
+	@./Tests/verify_binaries.sh
 
 run:
 	$(MAKE) -C WalkmanSync run

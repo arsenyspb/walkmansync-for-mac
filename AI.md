@@ -26,13 +26,14 @@ The application operates in **dual-mode**:
 ---
 
 ## 2. Environment & Tooling
-* **Language & Runtime:** Swift 5.9+ targeting macOS 12.0+ (`darwin`).
-* **Frameworks:** Native `Foundation`, `AppKit`, `AVFoundation` (metadata extraction).
-* **Dependencies:** Zero external dependencies (no third-party packages, no Java, no VMs).
-* **Dev Environment:** Native macOS with Xcode Command Line Tools. (Linux DevContainers are not supported due to macOS AppKit/AVFoundation requirements).
+* **Language & Runtime:** Swift 5.9+ targeting macOS 13.0+ (`arm64` and `x86_64`).
+* **Frameworks:** Native `Foundation`, `AppKit`, `AVFoundation` (metadata extraction), `IOKit`, `IOUSBHost` (macOS 12.0+).
+* **Dependencies:** Zero external dependencies for MP3 sync. Bundled tools (`atracdenc`) must be 100% self-contained Universal 2 binaries with NO external dynamic library linkages (`libsndfile`, Homebrew, etc.).
+* **Dev Environment:** Native macOS with Xcode Command Line Tools. (Linux DevContainers are not supported due to macOS AppKit/AVFoundation/IOUSBHost requirements).
 * **Build Tools:**
-  * `make test`: Compiles and executes `Tests/TestRunner.swift`.
-  * `make build`: Compiles `WalkmanSync.app` into `WalkmanSync/WalkmanSync.app`.
+  * `make test`: Compiles and executes `Tests/TestRunner.swift` and runs `Tests/verify_binaries.sh` (Mach-O architecture, deployment target, and dependency validator).
+  * `make build`: Compiles `WalkmanSync.app` into `WalkmanSync/WalkmanSync.app` as a Universal 2 fat binary.
+  * `make dmg`: Builds `WalkmanSync.app` and packages a standard drag-and-drop installer `.dmg`.
   * `make run`: Compiles and launches `WalkmanSync.app`.
   * `make clean`: Removes binaries, build artifacts, and generated `.app` bundles.
 
@@ -51,10 +52,21 @@ The application operates in **dual-mode**:
 ---
 
 ## 4. Development & Testing Principles
-1. **Zero External Dependencies:** Do not introduce third-party Swift packages or external binaries unless explicitly approved.
-2. **Hardware Compatibility & Round-Trip Verification:** Any modification to cryptographic routines, OMA container headers, or binary DB serialization must be accompanied by tests in `Tests/TestRunner.swift`.
-3. **Non-Destructive Device Operations:** Do not format or erase user files on connected volumes outside the managed `OMGAUDIO/` and `MP3FM/` folders.
-4. **Validation Routine:** Always run `make test` before submitting changes. Ensure `make build` compiles with zero warnings.
+1. **Mandatory Universal 2 Packaging (`arm64` + `x86_64`):**
+   * Every compiled executable (the main Swift app and any bundled helpers in `Resources/`) **MUST** be compiled as a Universal 2 fat binary supporting both Apple Silicon (`arm64`) and Intel (`x86_64`). Single-architecture binaries cause instant fatal crashes on Intel Macs (`POSIXErrorCode 86: Bad CPU type in executable`).
+2. **Explicit Deployment Target Flag (`-target <arch>-apple-macos13.0`):**
+   * Never invoke `swiftc` or `clang`/`clang++` without explicit deployment target flags (`-target arm64-apple-macos13.0` and `-target x86_64-apple-macos13.0`).
+   * Omitting `-target` allows pre-release SDK versions or host kernel triples (e.g. `arm64-apple-macosx27.2.0`) to leak into the Mach-O `LC_BUILD_VERSION` load command, preventing execution on older macOS versions with *"The application requires macOS XX.0 or later"*.
+3. **Strict Zero Non-System Dynamic Dependencies:**
+   * Any helper tool bundled into `WalkmanSync.app/Contents/Resources/` (such as `atracdenc`) **MUST NEVER** link dynamically against Homebrew libraries (`/opt/homebrew/...` or `/usr/local/...`). All helpers must be statically linked or implement self-contained parsers linking only to standard macOS system libraries (`/usr/lib/libSystem.B.dylib`, `/usr/lib/libc++.1.dylib`).
+4. **Automated Binary Verification in Tests:**
+   * `make test` enforces `Tests/verify_binaries.sh`, validating that all bundled binaries are dual-architecture, have `minos <= 13.0`, and have zero non-system dynamic linkages.
+5. **Hardware Compatibility & Round-Trip Verification:**
+   * Any modification to cryptographic routines, OMA container headers, or binary DB serialization must be accompanied by tests in `Tests/TestRunner.swift`.
+6. **Non-Destructive Device Operations:**
+   * Do not format or erase user files on connected volumes outside the managed `OMGAUDIO/` and `MP3FM/` folders.
+7. **Validation Routine:**
+   * Always run `make test` and `make dmg` before submitting changes. Ensure all targets compile cleanly with zero errors.
 
 ---
 
