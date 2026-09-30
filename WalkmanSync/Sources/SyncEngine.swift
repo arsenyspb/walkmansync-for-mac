@@ -182,6 +182,15 @@ public class SyncEngine {
         codec: WalkmanDBGenerator.AudioCodec = .atrac3,
         progressCallback: ((String) -> Void)? = nil
     ) throws {
+        // Prevent macOS idle system sleep during audio transcoding and USB transfer
+        let sleepAssertion = ProcessInfo.processInfo.beginActivity(
+            options: [.idleSystemSleepDisabled, .suddenTerminationDisabled, .userInitiated],
+            reason: "Syncing and encoding audio tracks to Sony Walkman"
+        )
+        defer {
+            ProcessInfo.processInfo.endActivity(sleepAssertion)
+        }
+
         WalkmanLogger.info("Starting file transfer to Walkman at \(destination.path) using codec \(codec.rawValue)")
         let fm = FileManager.default
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
