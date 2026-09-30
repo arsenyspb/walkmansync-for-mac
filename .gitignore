@@ -18,6 +18,7 @@ Thumbs.db
 *.zip
 *.tar.gz
 *.tgz
+*.dmg
 
 # Temporary files
 *.tmp

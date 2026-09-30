@@ -20,23 +20,18 @@ jobs:
       - name: Run Test Suite
         run: make test
 
-      - name: Build WalkmanSync Application
-        run: make build
-
-      - name: Package App Bundle
-        run: |
-          cd WalkmanSync
-          zip -r WalkmanSync.app.zip WalkmanSync.app
+      - name: Build Application & Package DMG
+        run: make dmg
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WalkmanSync.app
-          path: WalkmanSync/WalkmanSync.app.zip
+          name: WalkmanSync.dmg
+          path: WalkmanSync/WalkmanSync.dmg
 
       - name: Auto-Release on Git Tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: WalkmanSync/WalkmanSync.app.zip
+          files: WalkmanSync/WalkmanSync.dmg
           generate_release_notes: true

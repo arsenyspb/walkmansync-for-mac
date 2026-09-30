@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var sourcePathLabel: NSTextField!
     var walkmanPathLabel: NSTextField!
     var extractKeyBtn: NSButton!
+    var updateBadgeBtn: NSButton!
     var storageLabel: NSTextField!
     var capacityLabel: NSTextField!
     var codecPopUp: NSPopUpButton!
@@ -71,8 +72,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         let titleLabel = NSTextField(labelWithString: "Walkman Sync")
         titleLabel.font = NSFont.boldSystemFont(ofSize: 22)
-        titleLabel.frame = NSMakeRect(105, 368, 415, 28)
+        titleLabel.frame = NSMakeRect(105, 368, 250, 28)
         contentView.addSubview(titleLabel)
+        
+        // Update badge button (top-right, initially hidden)
+        updateBadgeBtn = NSButton(title: "✨ Update Available", target: self, action: #selector(openUpdateURL))
+        updateBadgeBtn.bezelStyle = .inline
+        updateBadgeBtn.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        updateBadgeBtn.contentTintColor = .systemBlue
+        updateBadgeBtn.frame = NSMakeRect(380, 368, 140, 24)
+        updateBadgeBtn.isHidden = true
+        contentView.addSubview(updateBadgeBtn)
         
         let subTitle = NSTextField(labelWithString: "Zero-friction native music sync for Sony Network Walkman")
         subTitle.font = NSFont.systemFont(ofSize: 11)
@@ -188,6 +198,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         
         updateDependencyStatus()
+        
+        // Check for updates asynchronously on startup
+        checkForUpdates(silentIfLatest: true)
         
         // Start continuous live device monitoring after UI is ready
         startDeviceMonitoring()
@@ -643,6 +656,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenu.addItem(NSMenuItem(title: "About WalkmanSync", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdatesManual), keyEquivalent: "U"))
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit WalkmanSync", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         appMenuItem.submenu = appMenu
@@ -653,9 +667,89 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let helpMenu = NSMenu(title: "Help")
         helpMenu.addItem(NSMenuItem(title: "Open Log File in Console", action: #selector(openLogs), keyEquivalent: "l"))
         helpMenu.addItem(NSMenuItem(title: "Reveal Log File in Finder", action: #selector(revealLogs), keyEquivalent: "L"))
+        helpMenu.addItem(NSMenuItem.separator())
+        helpMenu.addItem(NSMenuItem(title: "Visit GitHub Project Page", action: #selector(openProjectURL), keyEquivalent: ""))
         helpMenuItem.submenu = helpMenu
         
         NSApp.mainMenu = mainMenu
+    }
+    
+    @objc func openProjectURL() {
+        if let url = URL(string: "https://github.com/arsenyspb/walkmansync-for-mac") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    var latestReleaseURL: URL?
+    
+    @objc func checkForUpdatesManual() {
+        checkForUpdates(silentIfLatest: false)
+    }
+    
+    @objc func openUpdateURL() {
+        if let url = latestReleaseURL ?? URL(string: "https://github.com/arsenyspb/walkmansync-for-mac/releases/latest") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    func checkForUpdates(silentIfLatest: Bool) {
+        guard let url = URL(string: "https://api.github.com/repos/arsenyspb/walkmansync-for-mac/releases/latest") else { return }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4.0
+        request.setValue("WalkmanSync/\(CLIHandler.version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String,
+                  let htmlUrlStr = json["html_url"] as? String,
+                  let releaseURL = URL(string: htmlUrlStr) else {
+                if !silentIfLatest {
+                    DispatchQueue.main.async {
+                        let alert = NSAlert()
+                        alert.messageText = "Update Check Failed"
+                        alert.informativeText = "Unable to connect to GitHub to check for updates. Please check your internet connection."
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "OK")
+                        alert.runModal()
+                    }
+                }
+                return
+            }
+            
+            let latestVersion = tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+            let currentClean = CLIHandler.version.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+            let isNewer = latestVersion.compare(currentClean, options: .numeric) == .orderedDescending
+            
+            DispatchQueue.main.async {
+                self?.latestReleaseURL = releaseURL
+                if isNewer {
+                    self?.updateBadgeBtn?.title = "✨ Update: v\(latestVersion)"
+                    self?.updateBadgeBtn?.isHidden = false
+                    
+                    if !silentIfLatest {
+                        let alert = NSAlert()
+                        alert.messageText = "New Update Available!"
+                        alert.informativeText = "WalkmanSync v\(latestVersion) is now available (you are running v\(CLIHandler.version)).\n\nWould you like to open GitHub Releases to download the latest DMG?"
+                        alert.alertStyle = .informational
+                        alert.addButton(withTitle: "Download Update")
+                        alert.addButton(withTitle: "Later")
+                        if alert.runModal() == .alertFirstButtonReturn {
+                            NSWorkspace.shared.open(releaseURL)
+                        }
+                    }
+                } else if !silentIfLatest {
+                    let alert = NSAlert()
+                    alert.messageText = "You're Up to Date!"
+                    alert.informativeText = "WalkmanSync v\(CLIHandler.version) is currently the newest version available."
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            }
+        }.resume()
     }
     
     @objc func revealLogs() {

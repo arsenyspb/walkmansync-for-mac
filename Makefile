@@ -34,4 +34,8 @@ install-cli: build
 	@ln -sf $(PWD)/WalkmanSync/WalkmanSync.app/Contents/MacOS/WalkmanSync $(HOME)/.local/bin/walkmansync
 	@echo "Installed to $(HOME)/.local/bin/walkmansync"
 
-.PHONY: all build clean test run cli install-cli
+dmg:
+	$(MAKE) -C WalkmanSync dmg
+	@cp WalkmanSync/WalkmanSync.dmg ./WalkmanSync.dmg 2>/dev/null || true
+
+.PHONY: all build clean test run cli install-cli dmg

@@ -32,6 +32,7 @@ public class CLIHandler {
             case clean
             case extractKey
             case extractKeyInternal
+            case checkUpdate
         }
         
         var i = 0
@@ -56,6 +57,8 @@ public class CLIHandler {
                 action = .sync
             case "--clean":
                 action = .clean
+            case "--check-update", "-u":
+                action = .checkUpdate
             case "--extract-key", "-k":
                 action = .extractKey
             case "--extract-key-internal":
@@ -156,6 +159,9 @@ public class CLIHandler {
             
         case .extractKeyInternal:
             handleExtractKeyInternal(explicitPath: walkmanPath, explicitCacheDir: cacheDirPath)
+            
+        case .checkUpdate:
+            handleCheckUpdate(isJSON: isJSON)
             
         case .sync:
             guard let src = sourcePath else {
@@ -542,6 +548,71 @@ public class CLIHandler {
         }
     }
     
+    private static func handleCheckUpdate(isJSON: Bool) {
+        let sema = DispatchSemaphore(value: 0)
+        var latestTag: String?
+        var releaseURL: URL?
+        
+        guard let url = URL(string: "https://api.github.com/repos/arsenyspb/walkmansync-for-mac/releases/latest") else {
+            printError("Invalid GitHub releases URL.")
+            exit(1)
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4.0
+        request.setValue("WalkmanSync/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            defer { sema.signal() }
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String,
+                  let htmlUrlStr = json["html_url"] as? String,
+                  let u = URL(string: htmlUrlStr) else {
+                return
+            }
+            latestTag = tagName
+            releaseURL = u
+        }.resume()
+        
+        _ = sema.wait(timeout: .now() + 5.0)
+        
+        guard let tag = latestTag, let relURL = releaseURL else {
+            if isJSON {
+                print("{\"status\":\"error\",\"message\":\"Failed to fetch latest release from GitHub\"}")
+            } else {
+                print("Unable to fetch latest release from GitHub (check network connection).")
+            }
+            exit(1)
+        }
+        
+        let latestVersion = tag.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+        let currentClean = version.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+        let isNewer = latestVersion.compare(currentClean, options: .numeric) == .orderedDescending
+        
+        if isJSON {
+            let output: [String: Any] = [
+                "currentVersion": version,
+                "latestVersion": latestVersion,
+                "updateAvailable": isNewer,
+                "releaseURL": relURL.absoluteString
+            ]
+            if let d = try? JSONSerialization.data(withJSONObject: output, options: .prettyPrinted),
+               let s = String(data: d, encoding: .utf8) {
+                print(s)
+            }
+        } else {
+            if isNewer {
+                print("★ Update Available: WalkmanSync v\(latestVersion) is available! (Current: v\(version))")
+                print("  Download DMG at: \(relURL.absoluteString)")
+            } else {
+                print("✓ You are running the latest version of WalkmanSync (v\(version)).")
+            }
+        }
+        exit(0)
+    }
+    
     private static func handleExtractKey(explicitPath: String? = nil, isJSON: Bool) {
         let destinationURL = resolveWalkmanURL(explicitPath: explicitPath)
         if !isJSON {
@@ -663,6 +734,7 @@ public class CLIHandler {
             --detect, -d                  Detect and inspect connected Walkman devices
             --extract-key, -k             Extract authentic hardware encryption key from Walkman
             --doctor, -D                  Check system health, dependencies (FFmpeg, ATRAC), and keys
+            --check-update, -u            Check GitHub for newer WalkmanSync releases
             --scan <folder>               Scan music folder and list tracks, formats, metadata
             --sync --source <folder>      Sync local music folder to Walkman
             --clean                       Clean macOS AppleDouble (._*) files on Walkman

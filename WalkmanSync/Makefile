@@ -6,7 +6,21 @@ MACOS_DIR = $(APP_DIR)/Contents/MacOS
 RESOURCES_DIR = $(APP_DIR)/Contents/Resources
 VERSION = 0.3.1
 
+DMG_NAME = $(APP_NAME)-$(VERSION).dmg
+DMG_STAGING = $(APP_NAME)_DMG
+
 all: $(APP_DIR)
+
+dmg: $(APP_DIR)
+	@echo "Creating standard Drag-and-Drop installer DMG..."
+	@rm -rf $(DMG_STAGING) $(DMG_NAME) $(APP_NAME).dmg
+	@mkdir -p $(DMG_STAGING)
+	@cp -R $(APP_DIR) $(DMG_STAGING)/
+	@ln -s /Applications $(DMG_STAGING)/Applications
+	@hdiutil create -volname "$(APP_NAME)" -srcfolder $(DMG_STAGING) -ov -format UDZO $(DMG_NAME)
+	@ln -sf $(DMG_NAME) $(APP_NAME).dmg
+	@rm -rf $(DMG_STAGING)
+	@echo "DMG Created successfully: $(DMG_NAME) (also symlinked as $(APP_NAME).dmg)"
 
 $(APP_DIR): $(SWIFT_FILES) Info.plist
 	@echo "Building $(APP_NAME)..."
@@ -43,7 +57,7 @@ Info.plist:
 	@echo '</plist>' >> Info.plist
 
 clean:
-	@rm -rf $(APP_DIR) Info.plist
+	@rm -rf $(APP_DIR) Info.plist $(DMG_STAGING) *.dmg
 
 run: $(APP_DIR)
 	@open $(APP_DIR)
