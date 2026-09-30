@@ -1,0 +1,115 @@
+name: "Bug Report"
+description: "Report an issue, device connection problem, or playback error"
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Thanks for reporting an issue with WalkmanSync!
+        Before submitting, please make sure you have checked **WalkmanSync Doctor** (`walkmansync --doctor` or click the **🩺 Doctor...** button in the app).
+
+  - type: input
+    id: walkman_model
+    attributes:
+      label: Walkman Device Model & Storage
+      description: Which Sony Walkman model are you using?
+      placeholder: "e.g. Sony Network Walkman NW-E405 (512 MB), NW-E507, NW-HD5"
+    validations:
+      required: true
+
+  - type: input
+    id: macos_version
+    attributes:
+      label: macOS Version & Hardware Architecture
+      description: What macOS version and processor architecture are you running?
+      placeholder: "e.g. macOS 14.6 Sonoma (Apple Silicon M2) or macOS 13.5 (Intel Core i7)"
+    validations:
+      required: true
+
+  - type: input
+    id: app_version
+    attributes:
+      label: WalkmanSync Version
+      description: Which version of WalkmanSync are you running?
+      placeholder: "e.g. v0.3.1 (check in About WalkmanSync or run 'walkmansync --version')"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: codec
+    attributes:
+      label: Audio Codec Selected
+      description: Which audio codec was selected when syncing?
+      options:
+        - "ATRAC3 LP2 (132 kbps)"
+        - "ATRAC3 LP4 (66 kbps)"
+        - "ATRAC3plus (256 kbps)"
+        - "MP3 (320 kbps CBR)"
+        - "N/A (Device connection / Key extraction / DB issue)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: key_status
+    attributes:
+      label: Hardware Key Status
+      description: Did you extract the authentic hardware key using the '🔑 Extract' button or '--extract-key'?
+      options:
+        - "Yes, authentic key extracted (displays 'Key: 0x... (Authentic ✓)')"
+        - "No, using placeholder key (displays 'Key: 0x08DA6D03 (Placeholder ⚠️)')"
+        - "Key extraction failed with an error"
+        - "Unknown / Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor_output
+    attributes:
+      label: WalkmanSync Doctor Output
+      description: |
+        Please paste the output of `walkmansync --doctor` (or copy text from the **🩺 Doctor...** modal in the GUI).
+      render: shell
+      placeholder: |
+        Paste output of 'walkmansync --doctor' here...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Application Log Content
+      description: |
+        Please paste the relevant logs. You can easily view and copy them:
+        - **From the App**: Click the **"View Logs"** button at the bottom-right of the window, or choose **Help** -> **Open Log File in Console**.
+        - **From Finder**: Choose **Help** -> **Reveal Log File in Finder** (`~/Library/Logs/WalkmanSync/walkmansync.log`).
+        - **From Terminal**: Run `cat ~/Library/Logs/WalkmanSync/walkmansync.log` or execute your CLI command with `--verbose`.
+      render: text
+      placeholder: |
+        === Paste log contents from ~/Library/Logs/WalkmanSync/walkmansync.log here ===
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem Description & Expected Behavior
+      description: Describe what happened and what you expected to happen instead (e.g. 'CANNOT PLAY' on device, sync failure, device unmounts).
+      placeholder: "Describe the bug clearly..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction_steps
+    attributes:
+      label: Steps to Reproduce
+      description: List the step-by-step instructions to reproduce the issue.
+      placeholder: |
+        1. Connect Walkman NW-E405 via USB (OLED shows 'USB CONNECT')
+        2. Launch WalkmanSync v0.3.1
+        3. Click "Select" and pick local music directory containing .flac files
+        4. Choose codec "ATRAC3 LP2 (132 kbps)"
+        5. Click "Sync to Walkman"
+        6. Observe error dialog...
+    validations:
+      required: true

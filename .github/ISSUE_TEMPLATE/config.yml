@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 WalkmanSync Documentation & Guides
+    url: https://github.com/arsenyspb/walkmansync-for-mac#readme
+    about: Read the complete documentation on audio codecs, hardware keys, and troubleshooting.
+  - name: 🔑 Hardware Key Extraction Saga (Reverse-Engineering Report)
+    url: https://github.com/arsenyspb/walkmansync-for-mac/blob/main/CopyTool.exe.DvID.dat.md
+    about: Deep-dive reverse-engineering report on Sony SCSI commands and macOS IOUSBHost DeviceCapture bypass.
