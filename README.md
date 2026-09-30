@@ -35,36 +35,47 @@ Back in the 2000s, Sony required an old Windows PC running obsolete software cal
 
 ---
 
-## 🚀 Easy 1-Minute Installation
+## 🚀 Easy Installation
 
-You do not need to be a programmer or know terminal commands. Installing WalkmanSync is just like any normal Mac app:
+### Option 1: 1-Line Quick Install (Recommended)
+Open **Terminal** on your Mac (press `Cmd + Space`, type `Terminal`, and hit `Enter`), paste this single command, and press `Enter`:
 
-### Step 1: Download the App
-Click the blue download button below to grab the latest official installer:
-
-<p align="center">
-  <a href="https://github.com/arsenyspb/walkmansync-for-mac/releases/latest/download/WalkmanSync.dmg">
-    <img src="https://img.shields.io/badge/⬇️_Download_WalkmanSync_for_Mac-(.DMG)-007AFF?style=for-the-badge&logo=apple&logoColor=white" alt="Download WalkmanSync" />
-  </a>
-</p>
-
-*(Or visit [GitHub Releases](https://github.com/arsenyspb/walkmansync-for-mac/releases/latest) to pick `WalkmanSync.dmg`).*
-
-### Step 2: Drag to Applications
-Open the downloaded `WalkmanSync.dmg` file, then drag the **WalkmanSync** icon into your **Applications** folder:
-
-```text
-+-----------------------------------------------------+
-|                     WalkmanSync                     |
-|                                                     |
-|       [ WalkmanSync.app ]   --->   [ Applications ] |
-|                                                     |
-|          Drag WalkmanSync into Applications         |
-+-----------------------------------------------------+
+```bash
+curl -fsSL https://raw.githubusercontent.com/arsenyspb/walkmansync-for-mac/main/install.sh | bash
 ```
 
-### Step 3: Open WalkmanSync
-Open your **Applications** folder (or press `Cmd + Space` and search for *WalkmanSync*) and launch it!
+**Why this is the easiest way:**
+- Automatically downloads the official release and installs it into `/Applications/WalkmanSync.app`.
+- Automatically clears the macOS download security tag (`xattr -cr`) so the app opens immediately with a normal double-click.
+- Zero manual dragging, zero setup!
+
+---
+
+### Option 2: Download the Disk Image (.DMG)
+If you prefer downloading files manually:
+
+1. **[⬇️ Download WalkmanSync.dmg](https://github.com/arsenyspb/walkmansync-for-mac/releases/latest/download/WalkmanSync.dmg)** from the official release page.
+2. Open the downloaded `WalkmanSync.dmg` file, then drag **WalkmanSync** into **Applications**:
+   ```text
+   +-----------------------------------------------------+
+   |                     WalkmanSync                     |
+   |                                                     |
+   |       [ WalkmanSync.app ]   --->   [ Applications ] |
+   |                                                     |
+   |          Drag WalkmanSync into Applications         |
+   +-----------------------------------------------------+
+   ```
+3. **Important for macOS 15 (Sequoia) & modern macOS:**  
+   Because WalkmanSync is a free, open-source community tool not registered under Apple's paid $99/year corporate developer program, macOS marks internet downloads with a security tag and will display:  
+   *`"Apple could not verify WalkmanSync is free of malware that may harm your Mac..."`*
+
+   To permanently clear this warning, open **Terminal** once and run:
+   ```bash
+   xattr -cr /Applications/WalkmanSync.app
+   ```
+   **Why this is needed:** When you download any file through Safari or Chrome, macOS slaps a hidden digital quarantine tag on it (`com.apple.quarantine`). Running `xattr -cr` simply removes this download tag. Your Mac now treats WalkmanSync as a local app, allowing it to open normally with a double-click forever.
+
+   *(Alternatively, in macOS **System Settings** -> **Privacy & Security**, you can scroll down and click **"Open Anyway"**).*
 
 ---
 
@@ -113,6 +124,27 @@ WalkmanSync is engineered specifically for Sony's 3rd-generation audio players:
 - **Live Song Capacity Estimator**: As you switch audio quality settings, WalkmanSync tells you in plain English approximately how many songs will fit on your player (e.g. *~212 songs in high quality*).
 - **Self-Healing Backup**: If you ever format or erase your Walkman, WalkmanSync remembers your player's unique key and automatically restores it the next time you plug it in!
 - **Automatic Update Alerts**: WalkmanSync checks GitHub quietly in the background and shows a little badge when an update is available so you can update in one click.
+
+---
+
+<a name="dependencies--audio-encoders"></a>
+## Dependencies & Audio Encoders
+
+WalkmanSync is designed to be as lightweight and self-contained as possible:
+
+| Feature / Workflow | Tools Required | Status |
+|---|---|---|
+| **Direct MP3 Sync (Standard `.mp3` files)** | None | **100% Zero Dependencies** (Built-in pure Swift) |
+| **Sony ATRAC3 / ATRAC3plus Encoding** | `atracdenc` + `ffmpeg` | `atracdenc` is **Pre-Bundled** inside App; `ffmpeg` via Homebrew |
+| **Lossless Files (FLAC, M4A, WAV, AIFF, OGG)** | `ffmpeg` | `brew install ffmpeg` |
+| **Hardware Key Extraction & OMGAUDIO DB** | None | **Pure Native macOS (IOKit & IOUSBHost)** |
+
+### Installing FFmpeg (Optional)
+If your library contains lossless **FLAC / Apple M4A** files, or you want to encode in Sony's native hardware **ATRAC3** format:
+```bash
+brew install ffmpeg
+```
+*(Tip: If your music is already in standard `.mp3` format, selecting **MP3 (320 kbps CBR)** requires zero external tools!)*
 
 ---
 
