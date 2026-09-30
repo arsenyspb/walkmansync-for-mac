@@ -191,7 +191,7 @@ public class SyncEngine {
             ProcessInfo.processInfo.endActivity(sleepAssertion)
         }
 
-        WalkmanLogger.info("Starting file transfer to Walkman at \(destination.path) using codec \(codec.rawValue)")
+        WalkmanLogger.info("Starting file transfer to Walkman at \(destination.path) using codec \(codec.rawValue) (\(ProcessInfo.processInfo.activeProcessorCount) CPU cores active)")
         let fm = FileManager.default
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
         try fm.createDirectory(at: omgAudioDir, withIntermediateDirectories: true, attributes: nil)
@@ -233,8 +233,10 @@ public class SyncEngine {
                 }
                 
                 let codecName = codec.displayName
+                let trackDurationStr = String(format: "%d:%02d", title.length / 60, title.length % 60)
+                let trackStartTime = Date()
                 progressCallback?("[\(index + 1)/\(titles.count)] Preprocessing PCM: \(title.titleName)...")
-                WalkmanLogger.info("[\(index + 1)/\(titles.count)] ATRAC PCM decode: \(sourceURL.lastPathComponent)")
+                WalkmanLogger.info("[\(index + 1)/\(titles.count)] ATRAC PCM decode: \(sourceURL.lastPathComponent) [\(trackDurationStr)]")
                 
                 let tempWav = tempDir.appendingPathComponent("\(UUID().uuidString).wav")
                 let tempOma = tempDir.appendingPathComponent("\(UUID().uuidString).oma")
@@ -247,8 +249,8 @@ public class SyncEngine {
                 let ffProc = Process()
                 ffProc.executableURL = URL(fileURLWithPath: ffmpeg)
                 ffProc.arguments = ["-y", "-i", sourceURL.path, "-vn", "-ac", "2", "-ar", "44100", tempWav.path]
-                ffProc.standardOutput = Pipe()
-                ffProc.standardError = Pipe()
+                ffProc.standardOutput = FileHandle.nullDevice
+                ffProc.standardError = FileHandle.nullDevice
                 try ffProc.run()
                 ffProc.waitUntilExit()
                 
@@ -256,8 +258,9 @@ public class SyncEngine {
                     throw NSError(domain: "WalkmanSync", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to decode '\(title.titleName)' to PCM WAV."])
                 }
                 
-                // 2. Encode WAV to ATRAC OMA via atracdenc
-                progressCallback?("[\(index + 1)/\(titles.count)] Encoding \(codecName): \(title.titleName)...")
+                // 2. Encode WAV to ATRAC OMA via atracdenc with live percentage feedback
+                progressCallback?("[\(index + 1)/\(titles.count)] Encoding \(codecName): \(title.titleName) (0%)...")
+                WalkmanLogger.info("[\(index + 1)/\(titles.count)] Encoding \(codecName) via atracdenc...")
                 let atracProc = Process()
                 atracProc.executableURL = URL(fileURLWithPath: atracdenc)
                 let atracCodecFlag: String
@@ -267,10 +270,26 @@ public class SyncEngine {
                 default: atracCodecFlag = "atrac3"
                 }
                 atracProc.arguments = ["-e", atracCodecFlag, "--container", "oma", "-i", tempWav.path, "-o", tempOma.path]
-                atracProc.standardOutput = Pipe()
-                atracProc.standardError = Pipe()
+                
+                // Drain stdout continuously to prevent 64KB kernel pipe deadlock & provide live %
+                let atracOutPipe = Pipe()
+                atracProc.standardOutput = atracOutPipe
+                atracProc.standardError = FileHandle.nullDevice
+                
+                atracOutPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    guard !data.isEmpty, let output = String(data: data, encoding: .utf8) else { return }
+                    if let match = output.range(of: #"[0-9]+%"#, options: .regularExpression) {
+                        let pct = String(output[match])
+                        DispatchQueue.main.async {
+                            progressCallback?("[\(index + 1)/\(titles.count)] Encoding \(codecName): \(title.titleName) (\(pct))...")
+                        }
+                    }
+                }
+                
                 try atracProc.run()
                 atracProc.waitUntilExit()
+                atracOutPipe.fileHandleForReading.readabilityHandler = nil
                 
                 guard atracProc.terminationStatus == 0 && fm.fileExists(atPath: tempOma.path) else {
                     throw NSError(domain: "WalkmanSync", code: 5, userInfo: [NSLocalizedDescriptionKey: "atracdenc encoding failed for '\(title.titleName)'."])
@@ -280,7 +299,10 @@ public class SyncEngine {
                 progressCallback?("[\(index + 1)/\(titles.count)] Writing: \(title.titleName) (\(dirName)/\(fileName))...")
                 let fullOMA = try OMAContainerBuilder.createAtracOMA(title: title, atracOmaURL: tempOma)
                 try fullOMA.write(to: destOMAURL)
-                WalkmanLogger.info("Wrote ATRAC \(dirName)/\(fileName) (\(fullOMA.count) bytes)")
+                
+                let trackElapsed = Date().timeIntervalSince(trackStartTime)
+                let speedMultiplier = title.length > 0 ? (Double(title.length) / max(0.1, trackElapsed)) : 1.0
+                WalkmanLogger.info("Wrote ATRAC \(dirName)/\(fileName) (\(fullOMA.count) bytes) in \(String(format: "%.1f", trackElapsed))s (\(String(format: "%.1f", speedMultiplier))x real-time)")
                 
             } else {
                 // MP3 Pipeline
@@ -303,8 +325,8 @@ public class SyncEngine {
                     let process = Process()
                     process.executableURL = URL(fileURLWithPath: ffmpeg)
                     process.arguments = ["-y", "-i", sourceURL.path, "-vn", "-c:a", "libmp3lame", "-b:a", "320k", tempFile.path]
-                    process.standardOutput = Pipe()
-                    process.standardError = Pipe()
+                    process.standardOutput = FileHandle.nullDevice
+                    process.standardError = FileHandle.nullDevice
                     try process.run()
                     process.waitUntilExit()
                     
