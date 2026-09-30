@@ -7,12 +7,32 @@ echo "=================================================="
 echo ""
 
 APP_DIR="/Applications/WalkmanSync.app"
-DMG_URL="https://github.com/arsenyspb/walkmansync-for-mac/releases/latest/download/WalkmanSync.dmg"
 TEMP_DMG="/tmp/WalkmanSync_Install.dmg"
 MOUNT_DIR="/tmp/WalkmanSync_Mount"
 
-echo "[1/4] Downloading latest WalkmanSync.dmg..."
-curl -fsSL -o "$TEMP_DMG" "$DMG_URL"
+echo "[1/4] Resolving latest WalkmanSync release..."
+LATEST_TAG=$(curl -fsSL https://api.github.com/repos/arsenyspb/walkmansync-for-mac/releases/latest 2>/dev/null | grep '"tag_name":' | head -n 1 | cut -d '"' -f 4 || true)
+if [ -z "$LATEST_TAG" ]; then
+    LATEST_TAG="v0.3.1"
+fi
+echo "      Target release: $LATEST_TAG"
+
+echo "      Downloading WalkmanSync.dmg..."
+DOWNLOAD_SUCCESS=0
+for URL in \
+    "https://github.com/arsenyspb/walkmansync-for-mac/releases/download/${LATEST_TAG}/WalkmanSync.dmg" \
+    "https://github.com/arsenyspb/walkmansync-for-mac/releases/download/v0.3.1/WalkmanSync.dmg" \
+    "https://github.com/arsenyspb/walkmansync-for-mac/releases/latest/download/WalkmanSync.dmg"; do
+    if curl -fsSL -o "$TEMP_DMG" "$URL"; then
+        DOWNLOAD_SUCCESS=1
+        break
+    fi
+done
+
+if [ "$DOWNLOAD_SUCCESS" -ne 1 ]; then
+    echo "Error: Failed to download WalkmanSync.dmg from GitHub releases."
+    exit 1
+fi
 
 echo "[2/4] Mounting disk image..."
 mkdir -p "$MOUNT_DIR"
