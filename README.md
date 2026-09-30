@@ -5,7 +5,7 @@
 # WalkmanSync for Mac
 
 <p align="center">
-  <img src="img/Sony%20Walkman%20NW-E405.jpeg" alt="Sony Network Walkman NW-E405" width="480" />
+  <img src="img/sony-walkman-sync-for-apple-mac.png" alt="WalkmanSync for Mac Screenshot" width="620" />
 </p>
 
 <p align="center">
@@ -228,6 +228,14 @@ make run
 - **[AI Agent Development & Architecture Instructions](AI.md)**: Developer documentation and protocol specifications for coding agents.
 
 </details>
+
+---
+
+<p align="center">
+  <img src="img/Sony%20Walkman%20NW-E405.jpeg" alt="Sony Network Walkman NW-E405" width="480" />
+  <br />
+  <em>Physical Sony Network Walkman NW-E405 (512 MB) verified with authentic hardware key playback</em>
+</p>
 
 ---
 
