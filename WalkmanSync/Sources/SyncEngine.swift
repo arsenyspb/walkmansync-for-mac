@@ -37,38 +37,6 @@ public class SyncEngine {
         return nil
     }
     
-    /// Locates atracdenc encoder binary (bundled in App, Homebrew, or system PATH)
-    public static func findAtracdenc() -> String? {
-        if let bundlePath = Bundle.main.path(forResource: "atracdenc", ofType: nil), FileManager.default.isExecutableFile(atPath: bundlePath) {
-            return bundlePath
-        }
-        let execURL = URL(fileURLWithPath: CommandLine.arguments[0])
-        let resURL = execURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/atracdenc")
-        if FileManager.default.isExecutableFile(atPath: resURL.path) {
-            return resURL.path
-        }
-        if FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/atracdenc") {
-            return "/opt/homebrew/bin/atracdenc"
-        }
-        if FileManager.default.isExecutableFile(atPath: "/usr/local/bin/atracdenc") {
-            return "/usr/local/bin/atracdenc"
-        }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        p.arguments = ["atracdenc"]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        try? p.run()
-        p.waitUntilExit()
-        if p.terminationStatus == 0 {
-            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !out.isEmpty && FileManager.default.isExecutableFile(atPath: out) {
-                return out
-            }
-        }
-        return nil
-    }
-    
     /// Discovers all mounted Sony Walkman devices across /Volumes, system mounts, and custom paths
     public static func findAllWalkmanVolumes() -> [URL] {
         let fm = FileManager.default
@@ -175,11 +143,12 @@ public class SyncEngine {
         return titles
     }
     
-    /// Transfers files to Walkman with selectable audio encoder (ATRAC3, ATRAC3plus, or MP3):
+    /// Transfers files to Walkman with selectable MP3 bitrate and optional VBR ceiling
     public static func transferFilesToWalkman(
         titles: [WalkmanDBGenerator.WalkmanTitle],
         destination: URL,
-        codec: WalkmanDBGenerator.AudioCodec = .atrac3,
+        bitrate: WalkmanDBGenerator.MP3Bitrate = .kbps192,
+        isVBR: Bool = false,
         progressCallback: ((String) -> Void)? = nil
     ) throws {
         // Prevent macOS idle system sleep during audio transcoding and USB transfer
@@ -191,14 +160,14 @@ public class SyncEngine {
             ProcessInfo.processInfo.endActivity(sleepAssertion)
         }
 
-        WalkmanLogger.info("Starting file transfer to Walkman at \(destination.path) using codec \(codec.rawValue) (\(ProcessInfo.processInfo.activeProcessorCount) CPU cores active)")
+        let modeDesc = isVBR ? "VBR (\(bitrate.rawValue)k target)" : "\(bitrate.rawValue) kbps CBR"
+        WalkmanLogger.info("Starting file transfer to Walkman at \(destination.path) using MP3 \(modeDesc) (\(ProcessInfo.processInfo.activeProcessorCount) CPU cores active)")
         let fm = FileManager.default
         let omgAudioDir = destination.appendingPathComponent("OMGAUDIO", isDirectory: true)
         try fm.createDirectory(at: omgAudioDir, withIntermediateDirectories: true, attributes: nil)
         
         let deviceKey = WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destination)
         let ffmpegPath = findFFmpeg()
-        let atracdencPath = findAtracdenc()
         
         let tempDir = fm.temporaryDirectory.appendingPathComponent("WalkmanSyncTemp", isDirectory: true)
         try fm.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: nil)
@@ -214,149 +183,71 @@ public class SyncEngine {
             let fileName = String(format: "1000%04X.OMA", title.id)
             let destOMAURL = trackDir.appendingPathComponent(fileName)
             
-            if codec == .atrac3 || codec == .atrac3_lp4 || codec == .atrac3plus {
-                guard let atracdenc = atracdencPath else {
-                    WalkmanLogger.error("atracdenc encoder not found")
-                    throw NSError(
-                        domain: "WalkmanSync",
-                        code: 3,
-                        userInfo: [NSLocalizedDescriptionKey: "atracdenc encoder is missing. Please ensure atracdenc is installed at /opt/homebrew/bin/atracdenc or bundled with WalkmanSync."]
-                    )
-                }
+            let ext = sourceURL.pathExtension.lowercased()
+            var mp3URL = sourceURL
+            var isTempMP3 = false
+            
+            if ext != "mp3" {
                 guard let ffmpeg = ffmpegPath else {
-                    WalkmanLogger.error("FFmpeg not found for ATRAC PCM preprocessing")
                     throw NSError(
                         domain: "WalkmanSync",
                         code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "FFmpeg is required to prepare audio for ATRAC encoding. Please install via 'brew install ffmpeg'."]
+                        userInfo: [NSLocalizedDescriptionKey: "FFmpeg is required to convert .\(ext) files to MP3. Please install via 'brew install ffmpeg'."]
                     )
                 }
                 
-                let codecName = codec.displayName
-                let trackDurationStr = String(format: "%d:%02d", title.length / 60, title.length % 60)
-                let trackStartTime = Date()
-                progressCallback?("[\(index + 1)/\(titles.count)] Preprocessing PCM: \(title.titleName)...")
-                WalkmanLogger.info("[\(index + 1)/\(titles.count)] ATRAC PCM decode: \(sourceURL.lastPathComponent) [\(trackDurationStr)]")
+                progressCallback?("[\(index + 1)/\(titles.count)] Converting: \(title.titleName) (\(ext.uppercased()) → MP3 \(modeDesc))...")
+                let tempFile = tempDir.appendingPathComponent("\(UUID().uuidString).mp3")
                 
-                let tempWav = tempDir.appendingPathComponent("\(UUID().uuidString).wav")
-                let tempOma = tempDir.appendingPathComponent("\(UUID().uuidString).oma")
-                defer {
-                    try? fm.removeItem(at: tempWav)
-                    try? fm.removeItem(at: tempOma)
-                }
-                
-                // 1. Convert source to 44.1kHz 16-bit Stereo PCM WAV via FFmpeg
-                let ffProc = Process()
-                ffProc.executableURL = URL(fileURLWithPath: ffmpeg)
-                ffProc.arguments = ["-y", "-i", sourceURL.path, "-vn", "-ac", "2", "-ar", "44100", tempWav.path]
-                ffProc.standardOutput = FileHandle.nullDevice
-                ffProc.standardError = FileHandle.nullDevice
-                try ffProc.run()
-                ffProc.waitUntilExit()
-                
-                guard ffProc.terminationStatus == 0 && fm.fileExists(atPath: tempWav.path) else {
-                    throw NSError(domain: "WalkmanSync", code: 4, userInfo: [NSLocalizedDescriptionKey: "Failed to decode '\(title.titleName)' to PCM WAV."])
-                }
-                
-                // 2. Encode WAV to ATRAC OMA via atracdenc with live percentage feedback
-                progressCallback?("[\(index + 1)/\(titles.count)] Encoding \(codecName): \(title.titleName) (0%)...")
-                WalkmanLogger.info("[\(index + 1)/\(titles.count)] Encoding \(codecName) via atracdenc...")
-                let atracProc = Process()
-                atracProc.executableURL = URL(fileURLWithPath: atracdenc)
-                let atracCodecFlag: String
-                switch codec {
-                case .atrac3_lp4: atracCodecFlag = "atrac3_lp"
-                case .atrac3plus: atracCodecFlag = "atrac3plus"
-                default: atracCodecFlag = "atrac3"
-                }
-                atracProc.arguments = ["-e", atracCodecFlag, "--container", "oma", "-i", tempWav.path, "-o", tempOma.path]
-                
-                // Drain stdout continuously to prevent 64KB kernel pipe deadlock & provide live %
-                let atracOutPipe = Pipe()
-                atracProc.standardOutput = atracOutPipe
-                atracProc.standardError = FileHandle.nullDevice
-                
-                atracOutPipe.fileHandleForReading.readabilityHandler = { handle in
-                    let data = handle.availableData
-                    guard !data.isEmpty, let output = String(data: data, encoding: .utf8) else { return }
-                    if let match = output.range(of: #"[0-9]+%"#, options: .regularExpression) {
-                        let pct = String(output[match])
-                        DispatchQueue.main.async {
-                            progressCallback?("[\(index + 1)/\(titles.count)] Encoding \(codecName): \(title.titleName) (\(pct))...")
-                        }
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: ffmpeg)
+                var ffArgs = ["-y", "-i", sourceURL.path, "-vn", "-c:a", "libmp3lame"]
+                if isVBR {
+                    let qScale: String
+                    switch bitrate {
+                    case .kbps320: qScale = "0"
+                    case .kbps256: qScale = "1"
+                    case .kbps192: qScale = "2"
+                    case .kbps128: qScale = "4"
+                    case .kbps96:  qScale = "6"
                     }
+                    ffArgs.append(contentsOf: ["-q:a", qScale, "-b:a", bitrate.ffmpegBitrateFlag])
+                } else {
+                    ffArgs.append(contentsOf: ["-b:a", bitrate.ffmpegBitrateFlag])
                 }
+                ffArgs.append(tempFile.path)
+                process.arguments = ffArgs
+                process.standardOutput = FileHandle.nullDevice
+                process.standardError = FileHandle.nullDevice
+                try process.run()
+                process.waitUntilExit()
                 
-                try atracProc.run()
-                atracProc.waitUntilExit()
-                atracOutPipe.fileHandleForReading.readabilityHandler = nil
-                
-                guard atracProc.terminationStatus == 0 && fm.fileExists(atPath: tempOma.path) else {
-                    throw NSError(domain: "WalkmanSync", code: 5, userInfo: [NSLocalizedDescriptionKey: "atracdenc encoding failed for '\(title.titleName)'."])
+                guard process.terminationStatus == 0 && fm.fileExists(atPath: tempFile.path) else {
+                    throw NSError(domain: "WalkmanSync", code: 2, userInfo: [NSLocalizedDescriptionKey: "FFmpeg conversion failed for '\(title.titleName)'."])
                 }
-                
-                // 3. Prepend Sony EA3 metadata tag to OMA
-                progressCallback?("[\(index + 1)/\(titles.count)] Writing: \(title.titleName) (\(dirName)/\(fileName))...")
-                let fullOMA = try OMAContainerBuilder.createAtracOMA(title: title, atracOmaURL: tempOma)
-                try fullOMA.write(to: destOMAURL)
-                
-                let trackElapsed = Date().timeIntervalSince(trackStartTime)
-                let speedMultiplier = title.length > 0 ? (Double(title.length) / max(0.1, trackElapsed)) : 1.0
-                WalkmanLogger.info("Wrote ATRAC \(dirName)/\(fileName) (\(fullOMA.count) bytes) in \(String(format: "%.1f", trackElapsed))s (\(String(format: "%.1f", speedMultiplier))x real-time)")
-                
-            } else {
-                // MP3 Pipeline
-                let ext = sourceURL.pathExtension.lowercased()
-                var mp3URL = sourceURL
-                var isTempMP3 = false
-                
-                if ext != "mp3" {
-                    guard let ffmpeg = ffmpegPath else {
-                        throw NSError(
-                            domain: "WalkmanSync",
-                            code: 1,
-                            userInfo: [NSLocalizedDescriptionKey: "FFmpeg is required to convert .\(ext) to MP3."]
-                        )
-                    }
-                    
-                    progressCallback?("[\(index + 1)/\(titles.count)] Converting \(title.titleName) (\(ext.uppercased()) → MP3)...")
-                    let tempFile = tempDir.appendingPathComponent("\(UUID().uuidString).mp3")
-                    
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: ffmpeg)
-                    process.arguments = ["-y", "-i", sourceURL.path, "-vn", "-c:a", "libmp3lame", "-b:a", "320k", tempFile.path]
-                    process.standardOutput = FileHandle.nullDevice
-                    process.standardError = FileHandle.nullDevice
-                    try process.run()
-                    process.waitUntilExit()
-                    
-                    guard process.terminationStatus == 0 && fm.fileExists(atPath: tempFile.path) else {
-                        throw NSError(domain: "WalkmanSync", code: 2, userInfo: [NSLocalizedDescriptionKey: "FFmpeg conversion failed for '\(title.titleName)'."])
-                    }
-                    mp3URL = tempFile
-                    isTempMP3 = true
-                }
-                
-                defer {
-                    if isTempMP3 {
-                        try? fm.removeItem(at: mp3URL)
-                    }
-                }
-                
-                progressCallback?("[\(index + 1)/\(titles.count)] Scrambling & writing \(title.titleName)...")
-                let omaData = try OMAContainerBuilder.createEncryptedOMA(
-                    title: title,
-                    sourceMP3URL: mp3URL,
-                    deviceKey: deviceKey
-                )
-                try omaData.write(to: destOMAURL)
-                WalkmanLogger.info("Wrote MP3 \(dirName)/\(fileName) (\(omaData.count) bytes)")
+                mp3URL = tempFile
+                isTempMP3 = true
             }
+            
+            defer {
+                if isTempMP3 {
+                    try? fm.removeItem(at: mp3URL)
+                }
+            }
+            
+            progressCallback?("[\(index + 1)/\(titles.count)] Scrambling & writing: \(title.titleName)...")
+            let omaData = try OMAContainerBuilder.createEncryptedOMA(
+                title: title,
+                sourceMP3URL: mp3URL,
+                deviceKey: deviceKey,
+                isVBR: isVBR
+            )
+            try omaData.write(to: destOMAURL)
+            WalkmanLogger.info("Wrote MP3 \(dirName)/\(fileName) (\(omaData.count) bytes)")
         }
         
-        // Clean AppleDouble (._*) files and sync disk buffers
-        cleanAppleDouble(at: destination)
-        sync()
+        SyncEngine.cleanAppleDouble(at: destination)
+        Darwin.sync()
     }
     
     /// Cleans macOS AppleDouble dot-underscore files (._*) which confuse legacy embedded hardware

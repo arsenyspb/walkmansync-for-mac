@@ -56,13 +56,17 @@ struct TestRunner {
         assert(tag.prefix(3) == Data("ea3".utf8), "Tag magic must be 'ea3'")
         assert(tag[3] == 0x03, "Tag version must be 3")
         
-        let audioHdr = OMAContainerBuilder.buildEA3AudioHeader(title: title)
-        assert(audioHdr.count == 96, "EA3 audio header must be exactly 96 bytes")
-        assert(audioHdr.prefix(3) == Data("EA3".utf8), "Audio header magic must be 'EA3'")
-        assert(audioHdr[3] == 0x02, "Audio header version must be 2")
-        assert(audioHdr[6] == 0xFF && audioHdr[7] == 0xFE, "Protection marker must be 0xFFFE")
-        assert(audioHdr[32] == 0x03, "Codec ID must be 3 (MP3)")
-        print("EA3 tag and audio header PASSED")
+        let audioHdrCBR = OMAContainerBuilder.buildEA3AudioHeader(title: title, isVBR: false)
+        assert(audioHdrCBR.count == 96, "EA3 audio header must be exactly 96 bytes")
+        assert(audioHdrCBR.prefix(3) == Data("EA3".utf8), "Audio header magic must be 'EA3'")
+        assert(audioHdrCBR[3] == 0x02, "Audio header version must be 2")
+        assert(audioHdrCBR[6] == 0xFF && audioHdrCBR[7] == 0xFE, "Protection marker must be 0xFFFE")
+        assert(audioHdrCBR[32] == 0x03, "Codec ID must be 3 (MP3)")
+        assert(audioHdrCBR[33] == 0x80, "Byte 33 must be 0x80 for CBR")
+        
+        let audioHdrVBR = OMAContainerBuilder.buildEA3AudioHeader(title: title, isVBR: true)
+        assert(audioHdrVBR[33] == 0x90, "Byte 33 must be 0x90 for VBR")
+        print("EA3 tag and audio header (CBR & VBR) PASSED")
     }
 
     static func testDvidDataGeneration() {
@@ -149,7 +153,7 @@ struct TestRunner {
             WalkmanDBGenerator.WalkmanTitle(id: 3, titleName: "Song C", artistName: "Artist 2", albumName: "Album Y", genre: "Pop", length: 240)
         ]
         
-        let gen = WalkmanDBGenerator(isEncrypted3rdGen: true)
+        let gen = WalkmanDBGenerator(mp3Bitrate: .kbps192, isVBR: false, isEncrypted3rdGen: true)
         try! gen.generateDatabase(titles: titles, destination: tempDir)
         
         let expectedFiles = [

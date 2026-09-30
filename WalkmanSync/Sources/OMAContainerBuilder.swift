@@ -102,7 +102,8 @@ public enum OMAContainerBuilder {
     public static func buildEA3AudioHeader(
         title: WalkmanDBGenerator.WalkmanTitle,
         gotKey: Bool = true,
-        channels: Int = 2
+        channels: Int = 2,
+        isVBR: Bool = false
     ) -> Data {
         var header = Data(count: ea3AudioHeaderSize)
         
@@ -129,8 +130,8 @@ public enum OMAContainerBuilder {
         
         // Bytes 32-35: File Properties (4 bytes)
         header[32] = 0x03 // 0x03 = MP3 format
-        header[33] = 0x80 // 0x80 = CBR
-        header[34] = 0xD9 // MPEG-1 Layer 3, index 9 (128-320kbps standard)
+        header[33] = isVBR ? 0x90 : 0x80 // 0x90 = VBR, 0x80 = CBR
+        header[34] = 0xD9 // MPEG-1 Layer 3 standard index
         header[35] = (channels >= 2) ? 0x10 : 0x30 // Stereo (0x10) or Mono (0x30)
         
         // Bytes 36-39: Track length in milliseconds (4 bytes BigEndian)
@@ -200,10 +201,11 @@ public enum OMAContainerBuilder {
     public static func createEncryptedOMA(
         title: WalkmanDBGenerator.WalkmanTitle,
         sourceMP3URL: URL,
-        deviceKey: UInt32
+        deviceKey: UInt32,
+        isVBR: Bool = false
     ) throws -> Data {
         let ea3Tag = buildEA3Tag(title: title)
-        let ea3AudioHeader = buildEA3AudioHeader(title: title, gotKey: true)
+        let ea3AudioHeader = buildEA3AudioHeader(title: title, gotKey: true, isVBR: isVBR)
         
         var rawAudio = try extractRawMP3Audio(from: sourceMP3URL)
         let xorKey = WalkmanKeyManager.computeXorKey(trackId: title.id, deviceKey: deviceKey)
@@ -215,19 +217,5 @@ public enum OMAContainerBuilder {
         oma.append(ea3AudioHeader)
         oma.append(rawAudio)
         return oma
-    }
-    
-    /// Creates a complete ATRAC .OMA file (3072-byte EA3 tag + 96-byte EA3 audio header + ATRAC bitstream)
-    public static func createAtracOMA(
-        title: WalkmanDBGenerator.WalkmanTitle,
-        atracOmaURL: URL
-    ) throws -> Data {
-        let tag = buildEA3Tag(title: title)
-        let omaBody = try Data(contentsOf: atracOmaURL)
-        var fullOMA = Data()
-        fullOMA.reserveCapacity(tag.count + omaBody.count)
-        fullOMA.append(tag)
-        fullOMA.append(omaBody)
-        return fullOMA
     }
 }

@@ -43,11 +43,8 @@ check_binary() {
     echo "  ✓ Deployment target <= macOS 13.0 verified (minos: $MINOS_ENTRIES)"
 }
 
-check_binary "WalkmanSync/Resources/atracdenc"
-
 if [ -f "WalkmanSync/WalkmanSync.app/Contents/MacOS/WalkmanSync" ]; then
     check_binary "WalkmanSync/WalkmanSync.app/Contents/MacOS/WalkmanSync"
-    check_binary "WalkmanSync/WalkmanSync.app/Contents/Resources/atracdenc"
 fi
 
 echo "=== All Binary Checks PASSED ==="

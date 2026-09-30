@@ -25,7 +25,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var updateBadgeBtn: NSButton!
     var storageLabel: NSTextField!
     var capacityLabel: NSTextField!
-    var codecPopUp: NSPopUpButton!
+    var bitratePopUp: NSPopUpButton!
+    var vbrCheckbox: NSButton!
     var syncButton: NSButton!
     var statusLabel: NSTextField!
     var dependencyLabel: NSTextField!
@@ -145,19 +146,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         capacityLabel.frame = NSMakeRect(140, 175, 380, 38)
         contentView.addSubview(capacityLabel)
         
-        // --- Audio Codec Selection ---
-        let codecTitle = NSTextField(labelWithString: "Audio Codec:")
+        // --- Audio Quality Selection ---
+        let codecTitle = NSTextField(labelWithString: "MP3 Quality:")
         codecTitle.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         codecTitle.frame = NSMakeRect(20, 135, 115, 20)
         contentView.addSubview(codecTitle)
         
-        codecPopUp = NSPopUpButton(frame: NSMakeRect(138, 130, 380, 28), pullsDown: false)
-        for codec in WalkmanDBGenerator.AudioCodec.allCases {
-            codecPopUp.addItem(withTitle: codec.displayName)
+        bitratePopUp = NSPopUpButton(frame: NSMakeRect(138, 130, 245, 28), pullsDown: false)
+        for rate in WalkmanDBGenerator.MP3Bitrate.allCases {
+            bitratePopUp.addItem(withTitle: rate.displayName)
         }
-        codecPopUp.target = self
-        codecPopUp.action = #selector(codecChanged)
-        contentView.addSubview(codecPopUp)
+        bitratePopUp.target = self
+        bitratePopUp.action = #selector(qualityChanged)
+        contentView.addSubview(bitratePopUp)
+        
+        vbrCheckbox = NSButton(checkboxWithTitle: "Use VBR", target: self, action: #selector(qualityChanged))
+        vbrCheckbox.frame = NSMakeRect(395, 133, 125, 22)
+        vbrCheckbox.toolTip = "Variable Bit Rate: Dynamically adapts bitrate while capping at the selected ceiling."
+        contentView.addSubview(vbrCheckbox)
         
         // --- Dependency / Engine Status ---
         dependencyLabel = NSTextField(labelWithString: "")
@@ -260,7 +266,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    @objc func codecChanged() {
+    @objc func qualityChanged() {
         updateStorageDisplay()
         updateDependencyStatus()
     }
@@ -293,40 +299,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             extractKeyBtn?.toolTip = "Click to extract authentic factory encryption key from Walkman hardware."
         }
         
-        let atrac3Songs = Int(Double(freeMB) / 1.8)
-        let lp4Songs = Int(Double(freeMB) / 1.0)
-        let a3plusSongs = Int(Double(freeMB) / 3.5)
-        let mp3Songs = Int(Double(freeMB) / 7.5)
-        
-        let selectedIndex = codecPopUp?.indexOfSelectedItem ?? 0
-        let selectedFormat: String
-        let selectedCount: Int
-        switch selectedIndex {
-        case 0:
-            selectedFormat = "ATRAC3 LP2 (132 kbps)"
-            selectedCount = atrac3Songs
-        case 1:
-            selectedFormat = "ATRAC3 LP4 (66 kbps)"
-            selectedCount = lp4Songs
-        case 2:
-            selectedFormat = "ATRAC3plus (256 kbps)"
-            selectedCount = a3plusSongs
-        case 3:
-            selectedFormat = "MP3 (320 kbps CBR)"
-            selectedCount = mp3Songs
-        default:
-            selectedFormat = "ATRAC3 LP2 (132 kbps)"
-            selectedCount = atrac3Songs
+        let isVBR = vbrCheckbox?.state == .on
+        let selectedIndex = bitratePopUp?.indexOfSelectedItem ?? 0
+        let selectedBitrate: WalkmanDBGenerator.MP3Bitrate
+        if selectedIndex >= 0 && selectedIndex < WalkmanDBGenerator.MP3Bitrate.allCases.count {
+            selectedBitrate = WalkmanDBGenerator.MP3Bitrate.allCases[selectedIndex]
+        } else {
+            selectedBitrate = .kbps192
         }
         
+        let mbPerSong = isVBR ? (selectedBitrate.averageMbPerSong * 0.8) : selectedBitrate.averageMbPerSong
+        let songEstimate = max(0, Int(Double(freeMB) / mbPerSong))
+        
+        let modeLabel = isVBR ? "\(selectedBitrate.rawValue) kbps VBR (Adaptive with \(selectedBitrate.rawValue)k cap)" : "\(selectedBitrate.rawValue) kbps CBR"
         let attr = NSMutableAttributedString()
-        let primaryStr = "~\(selectedCount) songs with \(selectedFormat)\n"
+        let primaryStr = "~\(songEstimate) songs at \(modeLabel)\n"
         attr.append(NSAttributedString(string: primaryStr, attributes: [
             .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             .foregroundColor: NSColor.labelColor
         ]))
         
-        let comparisonStr = "All: ~\(atrac3Songs) LP2 (132k) • ~\(lp4Songs) LP4 (66k) • ~\(a3plusSongs) A3+ (256k) • ~\(mp3Songs) MP3 (320k)"
+        let c320 = Int(Double(freeMB) / 7.5)
+        let c256 = Int(Double(freeMB) / 6.0)
+        let c192 = Int(Double(freeMB) / 4.5)
+        let c128 = Int(Double(freeMB) / 3.0)
+        let c96 = Int(Double(freeMB) / 2.2)
+        let comparisonStr = "All: ~\(c320) (320k) • ~\(c256) (256k) • ~\(c192) (192k) • ~\(c128) (128k) • ~\(c96) (96k)"
         attr.append(NSAttributedString(string: comparisonStr, attributes: [
             .font: NSFont.systemFont(ofSize: 10, weight: .regular),
             .foregroundColor: NSColor.secondaryLabelColor
@@ -368,62 +366,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func updateDependencyStatus() {
         let hasFFmpeg = SyncEngine.findFFmpeg() != nil
-        let hasAtracdenc = SyncEngine.findAtracdenc() != nil
-        let selectedIndex = codecPopUp?.indexOfSelectedItem ?? 0
-        let isMP3 = selectedIndex == 3
-        
-        if isMP3 {
-            if hasFFmpeg {
-                dependencyLabel?.stringValue = "✓ Pure MP3 Mode (FFmpeg available for non-MP3 files)"
-                dependencyLabel?.textColor = .secondaryLabelColor
-            } else {
-                dependencyLabel?.stringValue = "✓ Pure MP3 Mode (Zero external tools required for .mp3)"
-                dependencyLabel?.textColor = .systemGreen
-            }
+        if hasFFmpeg {
+            dependencyLabel?.stringValue = "✓ Audio Engine: Ready (FFmpeg active for FLAC/M4A/WAV)"
+            dependencyLabel?.textColor = .secondaryLabelColor
         } else {
-            if hasFFmpeg && hasAtracdenc {
-                dependencyLabel?.stringValue = "● Audio Engine: Ready (FFmpeg & ATRAC3 active)"
-                dependencyLabel?.textColor = .systemGreen
-            } else if !hasFFmpeg {
-                dependencyLabel?.stringValue = "⚠️ FFmpeg missing for ATRAC3 (Click Doctor for setup)"
-                dependencyLabel?.textColor = .systemOrange
-            } else {
-                dependencyLabel?.stringValue = "⚠️ atracdenc encoder missing (Click Doctor for setup)"
-                dependencyLabel?.textColor = .systemRed
-            }
+            dependencyLabel?.stringValue = "✓ Pure MP3 Mode (Zero external tools needed for standard .mp3)"
+            dependencyLabel?.textColor = .systemGreen
         }
     }
     
     @objc func showDoctorDialog() {
         let ffmpeg = SyncEngine.findFFmpeg()
-        let atracdenc = SyncEngine.findAtracdenc()
         let walkman = walkmanUrl ?? SyncEngine.findWalkmanVolume()
         let key = walkman != nil ? WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: walkman!) : nil
         
         let alert = NSAlert()
-        alert.messageText = "WalkmanSync System Health & Dependencies"
+        alert.messageText = "WalkmanSync System Health & Diagnostics"
         
         var message = ""
         
         // FFmpeg
         if let ff = ffmpeg {
             message += "✓ FFmpeg: Installed (\(ff))\n"
-            message += "   Ready for: ATRAC3 encoding & FLAC/M4A/WAV decoding\n\n"
+            message += "   Ready for: FLAC, Apple M4A, ALAC, WAV, and AIFF conversion\n\n"
         } else {
-            message += "✗ FFmpeg: Not Installed\n"
-            message += "   Required for: ATRAC3 encoding & FLAC/M4A/WAV files\n"
-            message += "   Install via Homebrew: brew install ffmpeg\n"
-            message += "   (Note: Standard .mp3 files sync without FFmpeg!)\n\n"
-        }
-        
-        // atracdenc
-        if let at = atracdenc {
-            let note = at.contains(".app/") ? " (Bundled with App)" : ""
-            message += "✓ atracdenc: Available\(note)\n"
-            message += "   Ready for: Sony ATRAC3 / ATRAC3plus encoding\n\n"
-        } else {
-            message += "✗ atracdenc: Missing\n"
-            message += "   Required for: Sony ATRAC3 / ATRAC3plus encoding\n\n"
+            message += "• FFmpeg: Not Installed (Optional)\n"
+            message += "   Only needed if you want to sync lossless FLAC or Apple M4A files.\n"
+            message += "   Standard .mp3 files sync with 100% zero external dependencies!\n"
+            message += "   Install via Terminal: brew install ffmpeg\n\n"
         }
         
         // Walkman
@@ -539,17 +509,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         
-        let selectedIndex = codecPopUp?.indexOfSelectedItem ?? 0
-        let selectedCodec: WalkmanDBGenerator.AudioCodec
-        switch selectedIndex {
-        case 0: selectedCodec = .atrac3
-        case 1: selectedCodec = .atrac3_lp4
-        case 2: selectedCodec = .atrac3plus
-        case 3: selectedCodec = .mp3
-        default: selectedCodec = .atrac3
+        let selectedIndex = bitratePopUp?.indexOfSelectedItem ?? 0
+        let selectedBitrate: WalkmanDBGenerator.MP3Bitrate
+        if selectedIndex >= 0 && selectedIndex < WalkmanDBGenerator.MP3Bitrate.allCases.count {
+            selectedBitrate = WalkmanDBGenerator.MP3Bitrate.allCases[selectedIndex]
+        } else {
+            selectedBitrate = .kbps192
         }
+        let isVBR = vbrCheckbox?.state == .on
+        let modeDesc = isVBR ? "\(selectedBitrate.rawValue)k VBR" : "\(selectedBitrate.rawValue)k CBR"
         
-        WalkmanLogger.info("Sync started from source: \(source.path) to Walkman: \(destination.path) using codec \(selectedCodec.rawValue)")
+        WalkmanLogger.info("Sync started from source: \(source.path) to Walkman: \(destination.path) using MP3 \(modeDesc)")
         syncButton?.isEnabled = false
         statusLabel?.stringValue = "Scanning files..."
         
@@ -568,18 +538,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 
                 WalkmanLogger.info("Scanned \(titles.count) tracks from source")
                 
-                // Preflight dependency validation
+                // Preflight dependency validation for non-MP3 files
                 let hasNonMP3 = titles.contains { ($0.originalFile?.pathExtension.lowercased() ?? "") != "mp3" }
-                let requiresFFmpeg = selectedCodec != .mp3 || hasNonMP3
-                
-                if requiresFFmpeg && SyncEngine.findFFmpeg() == nil {
+                if hasNonMP3 && SyncEngine.findFFmpeg() == nil {
                     DispatchQueue.main.async {
                         self.syncButton?.isEnabled = true
                         self.statusLabel?.stringValue = "FFmpeg required. Run 'brew install ffmpeg' in Terminal."
                         
                         let alert = NSAlert()
-                        alert.messageText = "FFmpeg Required for This Operation"
-                        alert.informativeText = "ATRAC3 encoding and non-MP3 files (FLAC, M4A, WAV, etc.) require FFmpeg on your Mac.\n\nTo install FFmpeg, open Terminal and run:\n\n    brew install ffmpeg\n\nTip: You can sync standard .mp3 files directly using 'MP3 (320 kbps CBR)' with zero dependencies."
+                        alert.messageText = "FFmpeg Required for Audio Conversion"
+                        alert.informativeText = "Non-MP3 files (FLAC, M4A, WAV, etc.) require FFmpeg on your Mac to convert into Walkman MP3.\n\nTo install FFmpeg, open Terminal and run:\n\n    brew install ffmpeg\n\nTip: You can sync standard .mp3 files directly with zero external dependencies."
                         alert.alertStyle = .warning
                         alert.addButton(withTitle: "OK")
                         alert.addButton(withTitle: "Copy 'brew install ffmpeg'")
@@ -592,27 +560,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 
-                if selectedCodec != .mp3 && SyncEngine.findAtracdenc() == nil {
-                    DispatchQueue.main.async {
-                        self.syncButton?.isEnabled = true
-                        self.statusLabel?.stringValue = "atracdenc binary missing."
-                        
-                        let alert = NSAlert()
-                        alert.messageText = "atracdenc Encoder Missing"
-                        alert.informativeText = "The ATRAC encoder binary (atracdenc) was not found in the application bundle or system PATH.\n\nPlease reinstall WalkmanSync or place atracdenc at /opt/homebrew/bin/atracdenc."
-                        alert.alertStyle = .critical
-                        alert.addButton(withTitle: "OK")
-                        alert.runModal()
-                    }
-                    return
-                }
-                
                 DispatchQueue.main.async {
-                    self.statusLabel?.stringValue = "Starting sync for \(titles.count) tracks (\(selectedCodec.displayName))..."
+                    self.statusLabel?.stringValue = "Starting sync for \(titles.count) tracks (MP3 \(modeDesc))..."
                 }
                 
-                // 2. Transfer files with selectable encoder
-                try SyncEngine.transferFilesToWalkman(titles: titles, destination: destination, codec: selectedCodec) { msg in
+                // 2. Transfer files with selectable bitrate and VBR setting
+                try SyncEngine.transferFilesToWalkman(titles: titles, destination: destination, bitrate: selectedBitrate, isVBR: isVBR) { msg in
                     DispatchQueue.main.async {
                         self.statusLabel?.stringValue = msg
                     }
@@ -623,12 +576,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 
                 // 3. Generate all OMGAUDIO database files
-                let generator = WalkmanDBGenerator(codec: selectedCodec, isEncrypted3rdGen: true)
+                let generator = WalkmanDBGenerator(mp3Bitrate: selectedBitrate, isVBR: isVBR, isEncrypted3rdGen: true)
                 try generator.generateDatabase(titles: titles, destination: destination)
                 
                 // 4. Clean AppleDouble (._*) files created during DB writes and flush
                 SyncEngine.cleanAppleDouble(at: destination)
-                sync()
+                Darwin.sync()
                 
                 WalkmanLogger.info("Sync completed successfully for \(titles.count) tracks!")
                 DispatchQueue.main.async {

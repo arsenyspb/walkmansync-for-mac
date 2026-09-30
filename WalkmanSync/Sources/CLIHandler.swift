@@ -18,7 +18,8 @@ public class CLIHandler {
         var walkmanPath: String?
         var scanPath: String?
         var cacheDirPath: String?
-        var selectedCodec: WalkmanDBGenerator.AudioCodec = .atrac3
+        var selectedBitrate: WalkmanDBGenerator.MP3Bitrate = .kbps192
+        var isVBR = false
         var action: Action = .none
         
         enum Action {
@@ -78,10 +79,28 @@ public class CLIHandler {
                     i += 1
                     walkmanPath = args[i]
                 }
+            case "--bitrate", "-b":
+                if i + 1 < args.count {
+                    i += 1
+                    selectedBitrate = WalkmanDBGenerator.MP3Bitrate.from(string: args[i])
+                }
+            case "--vbr":
+                isVBR = true
             case "--codec", "-c":
                 if i + 1 < args.count {
                     i += 1
-                    selectedCodec = WalkmanDBGenerator.AudioCodec.from(string: args[i])
+                    let c = args[i].lowercased()
+                    if c.contains("320") {
+                        selectedBitrate = .kbps320
+                    } else if c.contains("256") {
+                        selectedBitrate = .kbps256
+                    } else if c.contains("128") || c.contains("atrac3") || c.contains("lp2") {
+                        selectedBitrate = .kbps128
+                    } else if c.contains("96") || c.contains("lp4") || c.contains("66") {
+                        selectedBitrate = .kbps96
+                    } else {
+                        selectedBitrate = .kbps192
+                    }
                 }
             case "--json":
                 isJSON = true
@@ -173,7 +192,7 @@ public class CLIHandler {
                 printError("No Walkman device detected. Connect via USB or specify --walkman <path>.")
                 exit(1)
             }
-            handleSync(sourcePath: src, destinationURL: destURL, codec: selectedCodec, isDryRun: isDryRun, isJSON: isJSON)
+            handleSync(sourcePath: src, destinationURL: destURL, bitrate: selectedBitrate, isVBR: isVBR, isDryRun: isDryRun, isJSON: isJSON)
             
         case .none:
             printUsage()
@@ -270,7 +289,6 @@ public class CLIHandler {
     
     private static func handleDoctor(explicitPath: String?, isJSON: Bool) {
         let ffmpeg = SyncEngine.findFFmpeg()
-        let atracdenc = SyncEngine.findAtracdenc()
         let dotCleanPath: String? = {
             if FileManager.default.isExecutableFile(atPath: "/usr/sbin/dot_clean") { return "/usr/sbin/dot_clean" }
             if FileManager.default.isExecutableFile(atPath: "/usr/bin/dot_clean") { return "/usr/bin/dot_clean" }
@@ -292,12 +310,7 @@ public class CLIHandler {
                 "ffmpeg": [
                     "available": ffmpeg != nil,
                     "path": ffmpeg ?? "",
-                    "requiredFor": "FLAC/M4A/WAV decoding and ATRAC3 encoding"
-                ],
-                "atracdenc": [
-                    "available": atracdenc != nil,
-                    "path": atracdenc ?? "",
-                    "bundled": atracdenc?.contains(".app/") ?? false
+                    "requiredFor": "FLAC/M4A/WAV to MP3 conversion"
                 ],
                 "dot_clean": [
                     "available": dotCleanPath != nil,
@@ -313,7 +326,7 @@ public class CLIHandler {
                     "path": appSupportDir.path
                 ],
                 "mp3DirectSyncReady": true,
-                "atrac3SyncReady": ffmpeg != nil && atracdenc != nil
+                "flacM4aSyncReady": ffmpeg != nil
             ]
             if let data = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.prettyPrinted]),
                let str = String(data: data, encoding: .utf8) {
@@ -329,21 +342,12 @@ public class CLIHandler {
         print("External Tools & Audio Encoders:")
         if let ff = ffmpeg {
             print("  [✓] FFmpeg:       \(ff)")
-            print("                    (Used for: FLAC/M4A/WAV decoding & ATRAC PCM preparation)")
+            print("                    (Used for: FLAC, Apple M4A, ALAC, WAV, and AIFF audio conversion)")
         } else {
-            print("  [✗] FFmpeg:       NOT FOUND")
-            print("                    -> Required for: ATRAC3 encoding & non-MP3 files (FLAC, M4A, WAV)")
-            print("                    -> To install:   brew install ffmpeg")
-            print("                    -> Note: Pure MP3 files can still be synced directly with '--codec mp3'!")
-        }
-        
-        if let at = atracdenc {
-            let bundledNote = at.contains(".app/") ? " (Bundled with App)" : ""
-            print("  [✓] atracdenc:    \(at)\(bundledNote)")
-            print("                    (Used for: Sony ATRAC3 / ATRAC3plus hardware encoding)")
-        } else {
-            print("  [✗] atracdenc:    NOT FOUND")
-            print("                    -> Required for: Sony ATRAC3 / ATRAC3plus hardware encoding")
+            print("  [•] FFmpeg:       NOT FOUND (Optional)")
+            print("                    -> Only needed to convert lossless FLAC or Apple M4A files")
+            print("                    -> To install: brew install ffmpeg")
+            print("                    -> Note: Standard .mp3 files sync with 100% zero external tools!")
         }
         
         if let dc = dotCleanPath {
@@ -383,10 +387,10 @@ public class CLIHandler {
         print("")
         print("Readiness Summary:")
         print("  • Pure MP3 Sync:          [READY] (Zero external dependencies required)")
-        if ffmpeg != nil && atracdenc != nil {
-            print("  • ATRAC3 / FLAC / M4A:    [READY] (All encoders and decoders present)")
+        if ffmpeg != nil {
+            print("  • FLAC / M4A / WAV Sync:  [READY] (FFmpeg installed)")
         } else {
-            print("  • ATRAC3 / FLAC / M4A:    [NEEDS FFMPEG] (Run: brew install ffmpeg)")
+            print("  • FLAC / M4A / WAV Sync:  [NEEDS FFMPEG] (Run: brew install ffmpeg)")
         }
         print("==================================================")
         exit(0)
@@ -440,20 +444,21 @@ public class CLIHandler {
         exit(0)
     }
     
-    private static func handleSync(sourcePath: String, destinationURL: URL, codec: WalkmanDBGenerator.AudioCodec, isDryRun: Bool, isJSON: Bool) {
+    private static func handleSync(sourcePath: String, destinationURL: URL, bitrate: WalkmanDBGenerator.MP3Bitrate, isVBR: Bool, isDryRun: Bool, isJSON: Bool) {
         let sourceURL = URL(fileURLWithPath: sourcePath)
         guard FileManager.default.fileExists(atPath: sourceURL.path) else {
             printError("Source folder not found: \(sourcePath)")
             exit(1)
         }
         
+        let modeDesc = isVBR ? "MP3 VBR (\(bitrate.rawValue)k target ceiling)" : "MP3 \(bitrate.rawValue) kbps CBR"
         if !isJSON {
             print("==================================================")
             print("WalkmanSync CLI — Native SonicStage Alternative")
             print("==================================================")
             print("Source:      \(sourceURL.path)")
             print("Destination: \(destinationURL.path)")
-            print("Codec:       \(codec.displayName)")
+            print("Quality:     \(modeDesc)")
             print("Dry Run:     \(isDryRun ? "YES" : "NO")")
             print("--------------------------------------------------")
         }
@@ -470,9 +475,9 @@ public class CLIHandler {
         
         if isDryRun {
             if isJSON {
-                print("{\"status\":\"dry-run-complete\",\"trackCount\":\(titles.count),\"codec\":\"\(codec.rawValue)\"}")
+                print("{\"status\":\"dry-run-complete\",\"trackCount\":\(titles.count),\"quality\":\"\(modeDesc)\"}")
             } else {
-                print("[✓] Dry run complete. \(titles.count) tracks are ready to sync using \(codec.displayName).")
+                print("[✓] Dry run complete. \(titles.count) tracks are ready to sync using \(modeDesc).")
             }
             exit(0)
         }
@@ -487,25 +492,20 @@ public class CLIHandler {
             print("--------------------------------------------------")
         }
         
-        // Preflight dependency check
+        // Preflight dependency check for non-MP3 files
         let hasNonMP3 = titles.contains { ($0.originalFile?.pathExtension.lowercased() ?? "") != "mp3" }
-        let requiresFFmpeg = codec != .mp3 || hasNonMP3
-        if requiresFFmpeg && SyncEngine.findFFmpeg() == nil {
-            printError("FFmpeg is required to prepare audio for \(codec.displayName)\(hasNonMP3 ? " (non-MP3 files detected)" : "").\n       Please install via 'brew install ffmpeg', or use pure .mp3 files with '--codec mp3'.")
-            exit(1)
-        }
-        if codec != .mp3 && SyncEngine.findAtracdenc() == nil {
-            printError("atracdenc encoder binary not found.\n       Please ensure atracdenc is bundled with WalkmanSync or installed at /opt/homebrew/bin/atracdenc.")
+        if hasNonMP3 && SyncEngine.findFFmpeg() == nil {
+            printError("FFmpeg is required to convert non-MP3 files (FLAC, M4A, WAV).\n       Please install via 'brew install ffmpeg', or sync standard .mp3 files directly.")
             exit(1)
         }
         
         do {
             if !isJSON {
-                print("[+] Encoding and transferring audio tracks (\(codec.displayName))...")
+                print("[+] Encoding and transferring audio tracks (\(modeDesc))...")
                 fflush(stdout)
             }
             
-            try SyncEngine.transferFilesToWalkman(titles: titles, destination: destinationURL, codec: codec) { progress in
+            try SyncEngine.transferFilesToWalkman(titles: titles, destination: destinationURL, bitrate: bitrate, isVBR: isVBR) { progress in
                 if !isJSON {
                     print("  -> \(progress)")
                     fflush(stdout)
@@ -517,17 +517,18 @@ public class CLIHandler {
                 fflush(stdout)
             }
             
-            let generator = WalkmanDBGenerator(codec: codec, isEncrypted3rdGen: true)
+            let generator = WalkmanDBGenerator(mp3Bitrate: bitrate, isVBR: isVBR, isEncrypted3rdGen: true)
             try generator.generateDatabase(titles: titles, destination: destinationURL)
             
             // Clean AppleDouble files generated during DB write and flush buffers
             SyncEngine.cleanAppleDouble(at: destinationURL)
-            sync()
+            Darwin.sync()
             
             if isJSON {
                 let result: [String: Any] = [
                     "status": "success",
                     "syncedTracks": titles.count,
+                    "quality": modeDesc,
                     "destination": destinationURL.path
                 ]
                 if let data = try? JSONSerialization.data(withJSONObject: result, options: .prettyPrinted),
@@ -742,8 +743,8 @@ public class CLIHandler {
             --help, -h                    Show this help screen
         
         OPTIONS:
-            --codec, -c <codec>           Target encoder (default: atrac3)
-                                          Options: atrac3 (132k LP2), atrac3_lp4 (66k), atrac3plus (256k), mp3 (320k)
+            --bitrate, -b <rate>          Target MP3 bitrate (320, 256, 192, 128, 96). Default: 192
+            --vbr                         Enable Variable Bit Rate (uses selected bitrate as ceiling)
             --source, -s <path>           Source music folder (MP3, FLAC, M4A, WAV, AIFF, OGG)
             --walkman, -w <path>          Walkman mount root (default: auto-detected in /Volumes)
             --json                        Format output as machine-readable JSON (great for agents!)

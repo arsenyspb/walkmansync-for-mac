@@ -28,7 +28,7 @@ The application operates in **dual-mode**:
 ## 2. Environment & Tooling
 * **Language & Runtime:** Swift 5.9+ targeting macOS 13.0+ (`arm64` and `x86_64`).
 * **Frameworks:** Native `Foundation`, `AppKit`, `AVFoundation` (metadata extraction), `IOKit`, `IOUSBHost` (macOS 12.0+).
-* **Dependencies:** Zero external dependencies for MP3 sync. Bundled tools (`atracdenc`) must be 100% self-contained Universal 2 binaries with NO external dynamic library linkages (`libsndfile`, Homebrew, etc.).
+* **Dependencies:** Zero external dependencies for MP3 sync. Optional `ffmpeg` for converting non-MP3 files (FLAC, M4A).
 * **Dev Environment:** Native macOS with Xcode Command Line Tools. (Linux DevContainers are not supported due to macOS AppKit/AVFoundation/IOUSBHost requirements).
 * **Build Tools:**
   * `make test`: Compiles and executes `Tests/TestRunner.swift` and runs `Tests/verify_binaries.sh` (Mach-O architecture, deployment target, and dependency validator).
@@ -71,6 +71,5 @@ The application operates in **dual-mode**:
 ---
 
 ## 5. Known Limitations & Technical Roadmap
-* **Bitrate Assumptions:** Currently hardcoded to 128 kbps CBR in `OMAContainerBuilder.buildEA3AudioHeader` (`0xD9`) and `WalkmanDBGenerator.writeCNFBelement`. Support for dynamic bitrates (VBR/CBR header inspection) is an active area for improvement.
 * **Volume Auto-Detection:** Currently looks for `/Volumes/WALKMAN` or mounted volumes containing `OMGAUDIO`.
-* **ATRAC Transcoding:** Future enhancement if modern ATRAC encoders are integrated.
+* **ATRAC Codec Limitations:** As documented in `ATRAC.MagicGate.DRM.md`, 3rd-generation Network Walkmans strictly mandate Sony's proprietary MagicGate LSI DRM certificates (`30GRCT/`, `0001001D.DAT`) for ATRAC playback. Modern open-source ATRAC bitstreams trigger `MG Error`. WalkmanSync focuses on authentic, hardware-verified MP3 playback (32k–320k CBR & VBR) unlocked via the extracted hardware key (`DvID.DAT`).

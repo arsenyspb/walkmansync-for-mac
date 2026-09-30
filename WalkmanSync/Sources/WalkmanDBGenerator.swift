@@ -12,70 +12,59 @@ import Foundation
 // - 05CIDLST.DAT (Content ID List)
 
 public class WalkmanDBGenerator {
-    public var codec: AudioCodec
+    public var mp3Bitrate: MP3Bitrate
+    public var isVBR: Bool
     private var isEncrypted3rdGen: Bool = true
     
-    public init(codec: AudioCodec = .atrac3, isEncrypted3rdGen: Bool = true) {
-        self.codec = codec
+    public init(mp3Bitrate: MP3Bitrate = .kbps192, isVBR: Bool = false, isEncrypted3rdGen: Bool = true) {
+        self.mp3Bitrate = mp3Bitrate
+        self.isVBR = isVBR
         self.isEncrypted3rdGen = isEncrypted3rdGen
     }
     
-    public enum AudioCodec: String, CaseIterable {
-        case atrac3 = "atrac3"          // ATRAC3 LP2 (132 kbps - Sony Standard)
-        case atrac3_lp4 = "atrac3_lp4"  // ATRAC3 LP4 (66 kbps - Maximum Storage)
-        case atrac3plus = "atrac3plus"  // ATRAC3plus (256 kbps - Hi-Fi)
-        case mp3 = "mp3"                // MP3 (320 kbps CBR)
+    public enum MP3Bitrate: String, CaseIterable {
+        case kbps192 = "192" // High Quality (Recommended)
+        case kbps320 = "320" // Maximum Fidelity
+        case kbps256 = "256" // Very High Quality
+        case kbps128 = "128" // Standard / Matches ATRAC3 LP2
+        case kbps96  = "96"  // Compact / Maximum Capacity
         
         public var displayName: String {
             switch self {
-            case .atrac3: return "ATRAC3 (132 kbps LP2 - Sony Standard)"
-            case .atrac3_lp4: return "ATRAC3 (66 kbps LP4 - Max Storage)"
-            case .atrac3plus: return "ATRAC3plus (256 kbps - Hi-Fi)"
-            case .mp3: return "MP3 (320 kbps CBR)"
+            case .kbps192: return "192 kbps (High Quality - Recommended)"
+            case .kbps320: return "320 kbps (Maximum Fidelity / Studio)"
+            case .kbps256: return "256 kbps (Very High Quality)"
+            case .kbps128: return "128 kbps (Standard - Matches ATRAC3 LP2)"
+            case .kbps96:  return "96 kbps (Compact - Maximum Capacity)"
             }
         }
         
         public var averageMbPerSong: Double {
             switch self {
-            case .atrac3: return 1.8
-            case .atrac3_lp4: return 1.0
-            case .atrac3plus: return 3.5
-            case .mp3: return 7.5
+            case .kbps320: return 7.5
+            case .kbps256: return 6.0
+            case .kbps192: return 4.5
+            case .kbps128: return 3.0
+            case .kbps96:  return 2.2
             }
         }
         
-        public var fileProperties: [UInt8] {
-            switch self {
-            case .atrac3:
-                return [0x00, 0x00, 0x20, 0x30] // 0x00 = ATRAC3, 132kbps LP2
-            case .atrac3_lp4:
-                return [0x00, 0x00, 0x10, 0x30] // 0x00 = ATRAC3, 66kbps LP4
-            case .atrac3plus:
-                return [0x00, 0x00, 0x40, 0x00] // 0x00 = ATRAC3plus 256kbps
-            case .mp3:
-                return [0x03, 0x80, 0xD9, 0x10] // 0x03 = MP3 CBR 320kbps
-            }
+        public var ffmpegBitrateFlag: String {
+            return "\(self.rawValue)k"
         }
         
-        public var protectionBytes: [UInt8] {
-            switch self {
-            case .mp3:
-                return [0xFF, 0xFE] // 3rd Gen OpenMG MP3 Encryption
-            case .atrac3, .atrac3_lp4, .atrac3plus:
-                return [0xFF, 0xFF] // Standard OpenMG ATRAC container (no DRM scrambling)
-            }
-        }
-        
-        public static func from(string: String) -> AudioCodec {
-            let lower = string.lowercased().replacingOccurrences(of: "-", with: "_")
-            if lower.contains("lp4") || lower == "atrac3_lp4" || lower == "lp4" || lower == "66" {
-                return .atrac3_lp4
-            } else if lower.contains("plus") || lower.contains("3p") || lower == "atrac3plus" || lower == "256" {
-                return .atrac3plus
-            } else if lower.contains("mp3") || lower == "320" {
-                return .mp3
+        public static func from(string: String) -> MP3Bitrate {
+            let lower = string.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            if lower.contains("320") {
+                return .kbps320
+            } else if lower.contains("256") {
+                return .kbps256
+            } else if lower.contains("128") {
+                return .kbps128
+            } else if lower.contains("96") {
+                return .kbps96
             } else {
-                return .atrac3
+                return .kbps192
             }
         }
     }
@@ -680,9 +669,9 @@ public class WalkmanDBGenerator {
         if maxValue > 0 {
             for id in 1...maxValue {
                 if let title = titles.first(where: { $0.id == id }) {
-                    data.append(writeCNFBelement(title: title, codec: codec))
+                    data.append(writeCNFBelement(title: title))
                 } else {
-                    data.append(writeCNFBelement(title: nil, codec: codec))
+                    data.append(writeCNFBelement(title: nil))
                 }
             }
         }
@@ -853,15 +842,22 @@ public class WalkmanDBGenerator {
         return d
     }
     
-    private func writeCNFBelement(title: WalkmanTitle?, codec: AudioCodec) -> Data {
+    private func writeCNFBelement(title: WalkmanTitle?) -> Data {
         var d = Data()
         let constant1: [UInt8] = [0x00, 0x05, 0x00, 0x80]
         let constant2: [UInt8] = [0x00, 0x02]
         
         if let t = title {
             d.append(contentsOf: [0x00, 0x00])
-            d.append(contentsOf: codec.protectionBytes)
-            d.append(contentsOf: codec.fileProperties)
+            d.append(contentsOf: [0xFF, 0xFE]) // 3rd Gen OpenMG MP3 Hardware Scrambled
+            
+            // File properties (4 bytes):
+            // Byte 0: 0x03 (MP3 format)
+            // Byte 1: 0x90 for VBR, 0x80 for CBR
+            // Byte 2: 0xD9 (MPEG-1 Layer 3)
+            // Byte 3: 0x10 (Stereo)
+            let vbrFlag: UInt8 = isVBR ? 0x90 : 0x80
+            d.append(contentsOf: [0x03, vbrFlag, 0xD9, 0x10])
             d.append(int2bytes(t.length * 1000, length: 4))
             d.append(contentsOf: constant1)
             

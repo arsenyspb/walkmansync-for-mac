@@ -128,23 +128,32 @@ WalkmanSync is engineered specifically for Sony's 3rd-generation audio players:
 ---
 
 <a name="dependencies--audio-encoders"></a>
-## Dependencies & Audio Encoders
+## Dependencies & Audio Quality
 
-WalkmanSync is designed to be as lightweight and self-contained as possible:
+WalkmanSync is designed to be 100% self-contained for everyday MP3 files:
 
 | Feature / Workflow | Tools Required | Status |
 |---|---|---|
 | **Direct MP3 Sync (Standard `.mp3` files)** | None | **100% Zero Dependencies** (Built-in pure Swift) |
-| **Sony ATRAC3 / ATRAC3plus Encoding** | `atracdenc` + `ffmpeg` | `atracdenc` is **Pre-Bundled** inside App; `ffmpeg` via Homebrew |
-| **Lossless Files (FLAC, M4A, WAV, AIFF, OGG)** | `ffmpeg` | `brew install ffmpeg` |
+| **All MP3 Bitrates (96k, 128k, 192k, 256k, 320k, VBR)** | None | **Natively Supported by Walkman Hardware** |
+| **Lossless Files (FLAC, Apple M4A, ALAC, WAV, AIFF)** | `ffmpeg` | `brew install ffmpeg` (converts to hardware MP3) |
 | **Hardware Key Extraction & OMGAUDIO DB** | None | **Pure Native macOS (IOKit & IOUSBHost)** |
 
+### Bitrate Freedom: Why MP3 Matches ATRAC
+The NW-E400/E500 series hardware MP3 decoder natively supports **all bitrates from 32 kbps to 320 kbps as well as Variable Bit Rate (VBR)**:
+* **320 kbps CBR**: Maximum studio fidelity (~65 songs on 512 MB)
+* **192 kbps CBR / VBR**: Near-CD audio quality (~115–150 songs on 512 MB)
+* **128 kbps CBR**: High density, exactly matching ATRAC3 LP2 (~175 songs on 512 MB)
+* **96 kbps CBR**: Maximum storage capacity (~240 songs on 512 MB)
+
+*(Curious why 3rd-generation Walkmans lock down ATRAC with MagicGate but play MP3 natively? Read our deep-dive reverse-engineering analysis in [ATRAC.MagicGate.DRM.md](ATRAC.MagicGate.DRM.md).)*
+
 ### Installing FFmpeg (Optional)
-If your library contains lossless **FLAC / Apple M4A** files, or you want to encode in Sony's native hardware **ATRAC3** format:
+If your library contains lossless **FLAC** or **Apple M4A** tracks, install FFmpeg once so WalkmanSync can convert them to hardware-scrambled MP3 on the fly:
 ```bash
 brew install ffmpeg
 ```
-*(Tip: If your music is already in standard `.mp3` format, selecting **MP3 (320 kbps CBR)** requires zero external tools!)*
+*(Tip: If your songs are already standard `.mp3` files, WalkmanSync requires zero external tools!)*
 
 ---
 
@@ -190,11 +199,17 @@ walkmansync --check-update
 # Scan a local folder to inspect track metadata
 walkmansync --scan ~/Music/MyAlbum
 
-# Sync music to Walkman with ATRAC3 LP2 (Default)
+# Sync music with recommended 192k CBR (Default)
 walkmansync --sync --source ~/Music/MyAlbum
 
-# Sync music with MP3 320k CBR encoding
-walkmansync --sync --source ~/Music/MyAlbum --codec mp3
+# Sync music with adaptive Variable Bit Rate (VBR)
+walkmansync --sync --source ~/Music/MyAlbum --vbr
+
+# Sync music with maximum fidelity (320k CBR)
+walkmansync --sync --source ~/Music/MyAlbum --bitrate 320
+
+# Sync music with compact 128k CBR (matches ATRAC3 LP2 density)
+walkmansync --sync --source ~/Music/MyAlbum --bitrate 128
 
 # Perform a dry-run test without writing to flash
 walkmansync --sync --source ~/Music/MyAlbum --dry-run
@@ -224,6 +239,7 @@ make run
 ```
 
 ### Technical Documentation & Architecture
+- **[The ATRAC & MagicGate DRM Saga: Why 3rd-Gen Walkmans Play MP3 via ASIC XOR but Lock Down ATRAC](ATRAC.MagicGate.DRM.md)**: Reverse-engineering Sony's dual-decoder architecture, "MG Error" vs "CANNOT PLAY", and why open-source tools cannot synthesize MagicGate LSI DRM certificates.
 - **[Reverse-Engineering Sony's CopyTool.exe & Hardware Key Extraction Saga](CopyTool.exe.DvID.dat.md)**: Disassembly analysis, proprietary SCSI CDB sequences (`A4 00 ... BC ... 3F`), and the native `IOUSBHost.framework` `DeviceCapture` kernel bypass.
 - **[AI Agent Development & Architecture Instructions](AI.md)**: Developer documentation and protocol specifications for coding agents.
 
