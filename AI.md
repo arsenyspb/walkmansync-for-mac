@@ -13,8 +13,9 @@ The application operates in **dual-mode**:
     * `10Fxx/1000xxxx.OMA`: Encrypted audio tracks (max 256 tracks per directory, indexed by `trackId`).
     * Full database suite: `00GTRLST.DAT`, `01TREE01.DAT`..`04.DAT`, `02TREINF.DAT`, `03GINF01.DAT`..`04.DAT`, `04CNTINF.DAT`, `05CIDLST.DAT`.
   * `MP3FM/`: Contains `DvID.DAT`, a 16-byte device identity file.
-* **OpenMG 3rd-Gen Cryptography:**
-  * **Device Key:** Stored at byte offset `0x0A..0x0D` of `DvID.DAT`. Default factory key: `0x08DA6D03`.
+* **OpenMG 3rd-Gen Cryptography & Hardware Key Extraction:**
+  * **Device Key:** Stored at byte offset `0x0A..0x0D` of `DvID.DAT`. Default placeholder key: `0x08DA6D03` (causes "CANNOT PLAY" on authentic hardware).
+  * **Hardware Key Extraction:** Direct ASIC query via USB Bulk-Only Transport (`IOUSBHost.framework` with `IOUSBHostObjectInitOptionsDeviceCapture` and root privilege elevation). Bypasses macOS kernel storage locks to send CDB `A4 00 00 00 00 00 00 BC 00 12 3F 00` and read the authentic 16-byte payload (e.g. `0x08FF8139`).
   * **Track XOR Key Formula:**
     `key = ((0x2465 + UInt64(trackId) * 0x5296E435) & 0xFFFFFFFF) ^ deviceKey`
   * **Scrambling:** In-place 8-byte repeating XOR block applied to raw audio frames (ID3v2 tags stripped).

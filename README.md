@@ -48,8 +48,9 @@ Historically, managing music on 3rd-generation Sony Walkmans required running de
   - Live capacity forecasting displayed in both the AppKit GUI and CLI (`walkmansync --detect`).
   - Automatically updates estimated song counts as you toggle between codecs.
 - **Hardware Encryption Key Extraction & Auto-Healing**:
-  - Complete reverse-engineered protocol for Sony's proprietary SCSI commands (`A4 00 ... BC ... 3F/33`).
-  - Automatic key discovery and persistent backup to `~/Library/Application Support/WalkmanSync/DvID.DAT`.
+  - Direct native extraction of authentic factory hardware keys from the Walkman's ASIC register over USB Bulk-Only Transport (`IOUSBHost.framework`), completely eliminating the need for Windows or Sony's legacy `CopyTool.exe`.
+  - One-click elevation in GUI (with standard macOS administrator prompt) and CLI (`walkmansync --extract-key`).
+  - Automatic key discovery and persistent multi-device backup to `~/Library/Application Support/WalkmanSync/DvID.DAT`.
   - Self-healing: if the Walkman is ever formatted, WalkmanSync immediately restores the authentic factory key with zero user intervention.
 - **Native macOS App (Swift & AppKit) + CLI**: Zero Java runtime dependency, zero virtual machines. Native macOS interface with official 2000s Walkman branding and full-featured CLI for terminal/scripting workflows.
 - **Universal Audio Ingest & Transcoding**: Ingests **MP3, FLAC, M4A (AAC/ALAC), WAV, AIFF, and OGG**, automatically converting and preparing containers on-the-fly.
@@ -134,9 +135,12 @@ make run
 
 1. **Connect your Sony Walkman** to your Mac via USB. The player will mount as a mass-storage drive (typically `/Volumes/WALKMAN`).
 2. **Launch WalkmanSync for Mac**. The app will detect the mounted Walkman automatically.
-3. Click **"Select"** under **Music Source** to pick your local folder of MP3 tracks.
-4. Click **"Sync to Walkman"**.
-5. WalkmanSync will:
+3. **One-Time Hardware Key Setup (If Needed)**:
+   - If your Walkman was freshly formatted or you are on a new Mac, click **"🔑 Extract"** in the GUI (or run `walkmansync --extract-key` in Terminal).
+   - Enter your macOS administrator password when prompted. WalkmanSync will seize the USB interface, extract your player's genuine hardware key, and permanently cache it.
+4. Click **"Select"** under **Music Source** to pick your local folder of MP3 tracks.
+5. Click **"Sync to Walkman"**.
+6. WalkmanSync will:
    - Extract ID3 metadata from all audio tracks.
    - Read device identity from `MP3FM/DvID.DAT`.
    - Encapsulate and XOR-scramble raw audio frames into `OMGAUDIO/10Fxx/1000xxxx.OMA`.

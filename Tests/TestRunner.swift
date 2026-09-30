@@ -7,6 +7,9 @@ struct TestRunner {
         testScrambleRoundTrip()
         testEA3TagAndHeader()
         testDvidDataGeneration()
+        testAuthenticKeyValidation()
+        testHardwareKeyParsingFromResponse()
+        testMultiDeviceCaching()
         testFullDatabaseSuiteGeneration()
         print("ALL TESTS PASSED!")
     }
@@ -75,6 +78,66 @@ struct TestRunner {
         assert(readKey == key, "DvID read key mismatch: got \(String(describing: readKey)), expected \(key)")
         try? FileManager.default.removeItem(at: tempURL)
         print("DvID.DAT generation & parsing PASSED")
+    }
+
+    static func testAuthenticKeyValidation() {
+        print("Testing Authentic Key Validation...")
+        assert(!WalkmanKeyManager.isKeyAuthentic(key: 0), "Key 0 should be invalid")
+        assert(!WalkmanKeyManager.isKeyAuthentic(key: WalkmanKeyManager.defaultDeviceKey), "Default placeholder key (0x08DA6D03) must not be authentic")
+        assert(WalkmanKeyManager.isKeyAuthentic(key: 0x08FF8139), "Hardware key 0x08FF8139 must be recognized as authentic")
+        print("Authentic Key Validation PASSED")
+    }
+
+    static func testHardwareKeyParsingFromResponse() {
+        print("Testing Hardware Key Parsing from 18-Byte USB Response...")
+        // Authentic response captured from physical NW-E405 ASIC register
+        let rawResponse: [UInt8] = [
+            0x00, 0x10, // Wrapper length (16 bytes)
+            0x03, 0x01, 0x01, 0x00, 0x00, 0x00, 0x01, 0x28, 0x00, 0x00,
+            0x08, 0xFF, 0x81, 0x39, // ASIC Key: 0x08FF8139
+            0x00, 0x00
+        ]
+        assert(rawResponse.count == 18, "Response must be 18 bytes")
+        
+        let payload = Data(rawResponse[2..<18])
+        assert(payload.count == 16, "Extracted DvID payload must be exactly 16 bytes")
+        
+        let k0 = UInt32(rawResponse[12])
+        let k1 = UInt32(rawResponse[13])
+        let k2 = UInt32(rawResponse[14])
+        let k3 = UInt32(rawResponse[15])
+        let key = (k0 << 24) | (k1 << 16) | (k2 << 8) | k3
+        assert(key == 0x08FF8139, "Parsed key must match ground truth 0x08FF8139, got 0x\(String(format: "%08X", key))")
+        
+        let tempURL = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Test_DvID_\(UUID().uuidString).DAT")
+        try! payload.write(to: tempURL)
+        let readBackKey = WalkmanKeyManager.readDeviceKey(from: tempURL)
+        assert(readBackKey == 0x08FF8139, "Read back key must match ground truth")
+        try? FileManager.default.removeItem(at: tempURL)
+        print("Hardware Key Parsing PASSED (Key: 0x08FF8139)")
+    }
+
+    static func testMultiDeviceCaching() {
+        print("Testing Multi-Device Caching...")
+        let tempCacheDir = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("CacheTest_\(UUID().uuidString)")
+        let dummyPayload = WalkmanKeyManager.generateDvidData(key: 0x08FF8139)
+        
+        WalkmanKeyManager.saveKeyToCache(payload: dummyPayload, key: 0x08FF8139, cacheDirectory: tempCacheDir)
+        
+        let primaryFile = tempCacheDir.appendingPathComponent("DvID.DAT")
+        let keyedFile = tempCacheDir.appendingPathComponent("DvID_08FF8139.DAT")
+        
+        assert(FileManager.default.fileExists(atPath: primaryFile.path), "Primary DvID.DAT must exist in cache")
+        assert(FileManager.default.fileExists(atPath: keyedFile.path), "Per-device DvID_08FF8139.DAT must exist in cache")
+        
+        let keyFromPrimary = WalkmanKeyManager.readDeviceKey(from: primaryFile)
+        let keyFromKeyed = WalkmanKeyManager.readDeviceKey(from: keyedFile)
+        
+        assert(keyFromPrimary == 0x08FF8139, "Key from primary cache must match")
+        assert(keyFromKeyed == 0x08FF8139, "Key from keyed cache must match")
+        
+        try? FileManager.default.removeItem(at: tempCacheDir)
+        print("Multi-Device Caching PASSED")
     }
 
     static func testFullDatabaseSuiteGeneration() {

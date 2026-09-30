@@ -1,7 +1,7 @@
 import Foundation
 
 public class CLIHandler {
-    public static let version = "0.3.0"
+    public static let version = "0.3.1"
     
     public static func shouldHandleCLI() -> Bool {
         let args = CommandLine.arguments.dropFirst().filter { !$0.starts(with: "-psn_") }
@@ -17,6 +17,7 @@ public class CLIHandler {
         var sourcePath: String?
         var walkmanPath: String?
         var scanPath: String?
+        var cacheDirPath: String?
         var selectedCodec: WalkmanDBGenerator.AudioCodec = .atrac3
         var action: Action = .none
         
@@ -29,6 +30,8 @@ public class CLIHandler {
             case scan
             case sync
             case clean
+            case extractKey
+            case extractKeyInternal
         }
         
         var i = 0
@@ -53,6 +56,15 @@ public class CLIHandler {
                 action = .sync
             case "--clean":
                 action = .clean
+            case "--extract-key", "-k":
+                action = .extractKey
+            case "--extract-key-internal":
+                action = .extractKeyInternal
+            case "--cache-dir":
+                if i + 1 < args.count {
+                    i += 1
+                    cacheDirPath = args[i]
+                }
             case "--source", "-s":
                 if i + 1 < args.count {
                     i += 1
@@ -139,6 +151,12 @@ public class CLIHandler {
             }
             exit(0)
             
+        case .extractKey:
+            handleExtractKey(explicitPath: walkmanPath, isJSON: isJSON)
+            
+        case .extractKeyInternal:
+            handleExtractKeyInternal(explicitPath: walkmanPath, explicitCacheDir: cacheDirPath)
+            
         case .sync:
             guard let src = sourcePath else {
                 printError("Missing music source folder. Usage: WalkmanSync --sync --source <path>")
@@ -177,7 +195,13 @@ public class CLIHandler {
             
             let dvidPath = vol.appendingPathComponent("MP3FM/DvID.DAT")
             let key = WalkmanKeyManager.readDeviceKey(from: dvidPath)
-            let keyHex = key != nil ? String(format: "0x%08X", key!) : "Not Initialized"
+            let isAuthentic = key != nil && WalkmanKeyManager.isKeyAuthentic(key: key!)
+            let keyHex: String
+            if let k = key {
+                keyHex = isAuthentic ? String(format: "0x%08X (Authentic ✓)", k) : String(format: "0x%08X (Placeholder ⚠️ - run --extract-key)", k)
+            } else {
+                keyHex = "Not Initialized (Run --extract-key)"
+            }
             
             let attrs = try? fm.attributesOfFileSystem(forPath: vol.path)
             let totalBytes = attrs?[.systemSize] as? Int64 ?? 0
@@ -194,6 +218,7 @@ public class CLIHandler {
                 "hasOmgAudio": hasOmgAudio,
                 "hasMp3fm": hasMp3fm,
                 "deviceKey": keyHex,
+                "isKeyAuthentic": isAuthentic,
                 "totalCapacityBytes": totalBytes,
                 "freeCapacityBytes": freeBytes,
                 "estimatedSongsAtrac3LP2": atrac3Songs,
@@ -329,14 +354,23 @@ public class CLIHandler {
             let totalMB = (attrs?[.systemSize] as? Int64 ?? 0) / (1024 * 1024)
             print("  [✓] Walkman USB:  Connected at \(vol.path) (\(freeMB) MB free of \(totalMB) MB)")
             if let key = resolvedKey {
-                print("  [✓] Hardware Key: 0x\(String(format: "%08X", key)) (Verified & Ready)")
+                if WalkmanKeyManager.isKeyAuthentic(key: key) {
+                    print("  [✓] Hardware Key: 0x\(String(format: "%08X", key)) (Authentic & Verified ✓)")
+                } else {
+                    print("  [!] Hardware Key: 0x\(String(format: "%08X", key)) (Placeholder ⚠️)")
+                    print("                    -> Audio will fail with 'CANNOT PLAY'. Run 'walkmansync --extract-key' to retrieve authentic key!")
+                }
             } else {
-                print("  [!] Hardware Key: Not yet resolved on device")
+                print("  [!] Hardware Key: Not yet resolved on device (Run 'walkmansync --extract-key')")
             }
         } else {
             print("  [-] Walkman USB:  Not connected (Connect Walkman via USB to sync)")
             if hasCachedKey, let key = resolvedKey {
-                print("  [✓] Hardware Key: 0x\(String(format: "%08X", key)) (Cached in Application Support)")
+                if WalkmanKeyManager.isKeyAuthentic(key: key) {
+                    print("  [✓] Hardware Key: 0x\(String(format: "%08X", key)) (Cached in Application Support ✓)")
+                } else {
+                    print("  [!] Hardware Key: 0x\(String(format: "%08X", key)) (Cached placeholder ⚠️)")
+                }
             }
         }
         
@@ -437,6 +471,16 @@ public class CLIHandler {
             exit(0)
         }
         
+        // Warn if using placeholder key
+        let dvidPath = destinationURL.appendingPathComponent("MP3FM/DvID.DAT")
+        let key = WalkmanKeyManager.readDeviceKey(from: dvidPath) ?? WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destinationURL)
+        if !WalkmanKeyManager.isKeyAuthentic(key: key) {
+            print("  ⚠️  WARNING: Device encryption key is uninitialized or a placeholder (0x\(String(format: "%08X", key))).")
+            print("      Songs transferred with this key will fail with 'CANNOT PLAY' on authentic hardware.")
+            print("      Run 'walkmansync --extract-key' to extract the authentic factory key from your player.")
+            print("--------------------------------------------------")
+        }
+        
         // Preflight dependency check
         let hasNonMP3 = titles.contains { ($0.originalFile?.pathExtension.lowercased() ?? "") != "mp3" }
         let requiresFFmpeg = codec != .mp3 || hasNonMP3
@@ -498,6 +542,105 @@ public class CLIHandler {
         }
     }
     
+    private static func handleExtractKey(explicitPath: String? = nil, isJSON: Bool) {
+        let destinationURL = resolveWalkmanURL(explicitPath: explicitPath)
+        if !isJSON {
+            print("==================================================")
+            print("WalkmanSync — Hardware Key Extraction")
+            print("==================================================")
+            print("Target Walkman: \(destinationURL?.path ?? "Auto-detecting via USB...")")
+            print("Initiating hardware cryptographic extraction over USB...")
+            fflush(stdout)
+        }
+        
+        do {
+            let key = try WalkmanKeyManager.extractHardwareKeyWithElevation(targetVolume: destinationURL)
+            let keyHex = String(format: "0x%08X", key)
+            let cachePath = WalkmanKeyManager.appSupportBackupURL.path
+            let deviceDvidPath = destinationURL?.appendingPathComponent("MP3FM/DvID.DAT").path
+            
+            if isJSON {
+                let dict: [String: Any] = [
+                    "status": "success",
+                    "hardwareKey": keyHex,
+                    "targetVolume": destinationURL?.path ?? "",
+                    "deviceDvIDPath": deviceDvidPath ?? "",
+                    "cachedDvIDPath": cachePath
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
+                   let str = String(data: data, encoding: .utf8) {
+                    print(str)
+                }
+            } else {
+                print("--------------------------------------------------")
+                print("✓ SUCCESS: Authentic Hardware Key Extracted!")
+                print("  Hardware Key:       \(keyHex)")
+                if let devPath = deviceDvidPath {
+                    print("  Saved to Walkman:   \(devPath)")
+                }
+                print("  Permanently Cached: \(cachePath)")
+                print("==================================================")
+                print("Your Walkman is now ready for flawless audio playback.")
+            }
+            exit(0)
+        } catch {
+            if isJSON {
+                let dict: [String: Any] = [
+                    "status": "error",
+                    "error": error.localizedDescription
+                ]
+                if let data = try? JSONSerialization.data(withJSONObject: dict, options: .prettyPrinted),
+                   let str = String(data: data, encoding: .utf8) {
+                    print(str)
+                }
+            } else {
+                printError("Key extraction failed: \(error.localizedDescription)")
+            }
+            exit(1)
+        }
+    }
+    
+    private static func handleExtractKeyInternal(explicitPath: String?, explicitCacheDir: String?) {
+        guard geteuid() == 0 else {
+            printError("Internal helper must be run with root privileges.")
+            exit(1)
+        }
+        
+        let destinationURL = resolveWalkmanURL(explicitPath: explicitPath)
+        let cacheURL = explicitCacheDir != nil ? URL(fileURLWithPath: explicitCacheDir!) : nil
+        
+        do {
+            let result = try WalkmanKeyManager.extractHardwareKeyDirectly()
+            let keyHex = String(format: "0x%08X", result.key)
+            
+            // Save to cache dir
+            if let cDir = cacheURL {
+                WalkmanKeyManager.saveKeyToCache(payload: result.payload, key: result.key, cacheDirectory: cDir)
+                // Fix ownership of the created cache files to match parent directory owner
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: cDir.path),
+                   let uid = attrs[.ownerAccountID] as? uid_t,
+                   let gid = attrs[.groupOwnerAccountID] as? gid_t {
+                    chown(cDir.appendingPathComponent("DvID.DAT").path, uid, gid)
+                    chown(cDir.appendingPathComponent("DvID_\(keyHex).DAT").path, uid, gid)
+                }
+            }
+            
+            // Save to Walkman volume if mounted
+            if let vol = destinationURL {
+                let mp3fmDir = vol.appendingPathComponent("MP3FM", isDirectory: true)
+                try? FileManager.default.createDirectory(at: mp3fmDir, withIntermediateDirectories: true, attributes: nil)
+                let dvidURL = mp3fmDir.appendingPathComponent("DvID.DAT")
+                try? result.payload.write(to: dvidURL)
+            }
+            
+            print("KEY:\(keyHex)")
+            exit(0)
+        } catch {
+            printError("Extraction failed: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+    
     private static func resolveWalkmanURL(explicitPath: String?) -> URL? {
         if let path = explicitPath {
             let url = URL(fileURLWithPath: path)
@@ -518,6 +661,7 @@ public class CLIHandler {
         
         ACTIONS:
             --detect, -d                  Detect and inspect connected Walkman devices
+            --extract-key, -k             Extract authentic hardware encryption key from Walkman
             --doctor, -D                  Check system health, dependencies (FFmpeg, ATRAC), and keys
             --scan <folder>               Scan music folder and list tracks, formats, metadata
             --sync --source <folder>      Sync local music folder to Walkman

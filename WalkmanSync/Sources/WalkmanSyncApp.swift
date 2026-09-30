@@ -21,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // UI Elements
     var sourcePathLabel: NSTextField!
     var walkmanPathLabel: NSTextField!
+    var extractKeyBtn: NSButton!
     var storageLabel: NSTextField!
     var capacityLabel: NSTextField!
     var codecPopUp: NSPopUpButton!
@@ -102,9 +103,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         walkmanPathLabel = NSTextField(labelWithString: "Searching for Walkman via USB...")
         walkmanPathLabel.font = NSFont.systemFont(ofSize: 13)
-        walkmanPathLabel.frame = NSMakeRect(140, 260, 380, 20)
+        walkmanPathLabel.frame = NSMakeRect(140, 260, 280, 20)
         walkmanPathLabel.textColor = .systemOrange
         contentView.addSubview(walkmanPathLabel)
+        
+        extractKeyBtn = NSButton(title: "🔑 Extract", target: self, action: #selector(extractKeyClicked))
+        extractKeyBtn.frame = NSMakeRect(430, 255, 90, 30)
+        extractKeyBtn.isEnabled = false
+        contentView.addSubview(extractKeyBtn)
         
         // --- Storage Capacity ---
         let storageTitle = NSTextField(labelWithString: "Storage Space:")
@@ -232,6 +238,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 WalkmanLogger.warn("Walkman device disconnected")
                 walkmanPathLabel?.stringValue = "Waiting for device to connect via USB..."
                 walkmanPathLabel?.textColor = .systemOrange
+                extractKeyBtn?.isEnabled = false
+                extractKeyBtn?.title = "🔑 Extract"
                 storageLabel?.stringValue = ""
                 capacityLabel?.stringValue = ""
                 updateSyncButton()
@@ -258,9 +266,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let percentFree = totalMB > 0 ? Int((Double(freeMB) / Double(totalMB)) * 100) : 0
         
         let key = WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: vol)
+        let isAuthentic = WalkmanKeyManager.isKeyAuthentic(key: key)
         let keyHex = String(format: "0x%08X", key)
         
-        storageLabel?.stringValue = "\(freeMB) MB free of \(totalMB) MB (\(percentFree)% available) • Key: \(keyHex)"
+        extractKeyBtn?.isEnabled = true
+        if isAuthentic {
+            storageLabel?.stringValue = "\(freeMB) MB free of \(totalMB) MB (\(percentFree)% available) • Key: \(keyHex) (Authentic ✓)"
+            extractKeyBtn?.title = "🔑 Key ✓"
+            extractKeyBtn?.toolTip = "Authentic hardware encryption key is verified. Click to re-extract if needed."
+        } else {
+            storageLabel?.stringValue = "\(freeMB) MB free of \(totalMB) MB (\(percentFree)% available) • Key: \(keyHex) (Placeholder ⚠️)"
+            extractKeyBtn?.title = "🔑 Extract"
+            extractKeyBtn?.toolTip = "Click to extract authentic factory encryption key from Walkman hardware."
+        }
         
         let atrac3Songs = Int(Double(freeMB) / 1.8)
         let lp4Songs = Int(Double(freeMB) / 1.0)
@@ -403,7 +421,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             message += "✓ Walkman USB: Connected (\(vol.lastPathComponent))\n"
             message += "   Storage: \(freeMB) MB free of \(totalMB) MB\n"
             if let k = key {
-                message += "   Hardware Key: 0x\(String(format: "%08X", k)) (Verified)\n"
+                if WalkmanKeyManager.isKeyAuthentic(key: k) {
+                    message += "   Hardware Key: 0x\(String(format: "%08X", k)) (Authentic & Verified ✓)\n"
+                } else {
+                    message += "   Hardware Key: 0x\(String(format: "%08X", k)) (Placeholder ⚠️ - Click '🔑 Extract')\n"
+                }
             }
         } else {
             message += "• Walkman USB: Not Connected\n"
@@ -430,12 +452,79 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    @objc func extractKeyClicked() {
+        extractKeyBtn?.isEnabled = false
+        statusLabel?.stringValue = "Requesting administrator access to capture USB interface..."
+        statusLabel?.textColor = .systemOrange
+        
+        let targetVol = walkmanUrl ?? SyncEngine.findWalkmanVolume()
+        
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                let key = try WalkmanKeyManager.extractHardwareKeyWithElevation(targetVolume: targetVol)
+                let keyHex = String(format: "0x%08X", key)
+                
+                DispatchQueue.main.async {
+                    self?.extractKeyBtn?.isEnabled = true
+                    self?.updateStorageDisplay()
+                    self?.statusLabel?.stringValue = "✓ Hardware Key 0x\(keyHex) Extracted & Saved"
+                    self?.statusLabel?.textColor = .systemGreen
+                    
+                    let alert = NSAlert()
+                    alert.messageText = "Hardware Key Extracted Successfully!"
+                    alert.informativeText = "Authentic Factory Key: 0x\(keyHex)\n\nYour Walkman's unique cryptographic key was extracted directly from the ASIC register and saved to /Volumes/WALKMAN/MP3FM/DvID.DAT.\n\nIt is also permanently backed up in Application Support. Audio files will now play flawlessly on your player!"
+                    alert.alertStyle = .informational
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            } catch WalkmanKeyManager.ExtractionError.scriptCancelled {
+                DispatchQueue.main.async {
+                    self?.extractKeyBtn?.isEnabled = true
+                    self?.statusLabel?.stringValue = "Key extraction cancelled"
+                    self?.statusLabel?.textColor = .secondaryLabelColor
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self?.extractKeyBtn?.isEnabled = true
+                    self?.statusLabel?.stringValue = "Key extraction failed"
+                    self?.statusLabel?.textColor = .systemRed
+                    
+                    let alert = NSAlert()
+                    alert.messageText = "Key Extraction Failed"
+                    alert.informativeText = "\(error.localizedDescription)\n\nPlease make sure your Walkman is connected via USB and displays 'USB CONNECT'."
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+            }
+        }
+    }
+    
     @objc func openLogs() {
         WalkmanLogger.openLogInConsole()
     }
     
     @objc func startSync() {
         guard let source = sourceUrl, let destination = walkmanUrl else { return }
+        
+        // Preflight check for placeholder hardware key
+        let currentKey = WalkmanKeyManager.resolveOrCreateDeviceKey(deviceURL: destination)
+        if !WalkmanKeyManager.isKeyAuthentic(key: currentKey) {
+            let alert = NSAlert()
+            alert.messageText = "⚠️ Hardware Encryption Key Not Initialized"
+            alert.informativeText = "Your Walkman is currently using a placeholder encryption key (0x\(String(format: "%08X", currentKey))). Files transferred with this key will fail to play on your Walkman hardware ('CANNOT PLAY').\n\nWould you like to extract the authentic factory key from your player now?"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "🔑 Extract Key Now")
+            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: "Sync with Placeholder Anyway")
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                extractKeyClicked()
+                return
+            } else if response == .alertSecondButtonReturn {
+                return
+            }
+        }
         
         let selectedIndex = codecPopUp?.indexOfSelectedItem ?? 0
         let selectedCodec: WalkmanDBGenerator.AudioCodec
