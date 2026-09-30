@@ -123,7 +123,7 @@ WalkmanSync is engineered specifically for Sony's 3rd-generation audio players:
 - **Reverse-Descramble & Library Backup**: Extract existing `.OMA` tracks off the Walkman back onto your Mac as standard, playable `.mp3` files with full ID3 tags (`[ 📥 Dump Tracks to Mac... ]` or `walkmansync --dump <folder>`).
 - **Safe Device Reset & Clean Wipe**: Purchased a used Walkman or want a fresh start? Reset your player to clean `NO DATA` (100% free capacity) while purging hidden macOS `.Trashes` leakages and strictly safeguarding your authentic hardware key (`[ 🗑️ Erase Walkman Music... ]` or `walkmansync --erase`).
 - **Works With Your Music**: Supports regular **MP3**, plus **FLAC**, **M4A (Apple Music/iTunes files)**, and **WAV**.
-- **Live Song Capacity Estimator**: As you switch audio quality settings, WalkmanSync tells you in plain English approximately how many songs will fit on your player (e.g. *~212 songs in high quality*).
+- **Interactive Storage Fit Calculator**: When you select your music folder, WalkmanSync calculates in real time whether the scanned songs will fit into your Walkman's available capacity. It shows exact required MB and remaining free space (or warns if over capacity), updating dynamically as you switch MP3 bitrates or toggle VBR. If no folder is selected, it shows general song count estimates.
 - **Self-Healing Backup**: If you ever format or erase your Walkman, WalkmanSync remembers your player's unique key and automatically restores it the next time you plug it in!
 - **Automatic Update Alerts**: WalkmanSync checks GitHub quietly in the background and shows a little badge when an update is available so you can update in one click.
 
